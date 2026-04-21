@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Админ-панель НГТУ</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+        .admin-container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+
+        .admin-header {
+            background: white;
+            border-radius: 15px;
+            padding: 25px 30px;
+            margin-bottom: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .header-left h1 { color: #2c3e50; font-size: 28px; margin-bottom: 5px; }
+        .header-left p { color: #7f8c8d; font-size: 16px; }
+        .user-info { display: flex; align-items: center; gap: 15px; }
+        .user-avatar {
+            width: 50px; height: 50px;
+            background: #667eea;
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            color: white; font-size: 22px; font-weight: bold;
+        }
+        .logout-btn {
+            background: #e74c3c; color: white; border: none;
+            padding: 12px 25px; border-radius: 8px;
+            cursor: pointer; font-weight: bold; transition: all 0.3s;
+        }
+        .logout-btn:hover { background: #c0392b; transform: translateY(-2px); }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        .stat-card {
+            background: white; border-radius: 12px; padding: 25px;
+            text-align: center; box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+            transition: transform 0.3s;
+        }
+        .stat-card:hover { transform: translateY(-5px); }
+        .stat-icon { font-size: 40px; margin-bottom: 15px; }
+        .stat-number { font-size: 36px; font-weight: bold; color: #2c3e50; margin-bottom: 5px; }
+        .stat-label { color: #7f8c8d; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; }
+
+        .controls {
+            background: white; border-radius: 12px; padding: 20px;
+            margin-bottom: 25px; display: flex; gap: 15px; flex-wrap: wrap;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.08); align-items: center;
+        }
+        .controls select {
+            padding: 10px 15px; border: 2px solid #e0e0e0;
+            border-radius: 8px; font-size: 14px; background: white;
+        }
+        .section-fill {
+            margin-left: auto; font-weight: bold; color: #667eea;
+            padding: 8px 15px; background: #f0f7ff; border-radius: 8px;
+        }
+
+        .btn {
+            padding: 12px 25px; border: none; border-radius: 8px;
+            cursor: pointer; font-weight: bold; display: flex;
+            align-items: center; gap: 8px; transition: all 0.3s; font-size: 14px;
+        }
+        .btn-primary { background: #3498db; color: white; }
+        .btn-primary:hover { background: #2980b9; transform: translateY(-2px); }
+        .btn-success { background: #2ecc71; color: white; }
+        .btn-success:hover { background: #27ae60; transform: translateY(-2px); }
+        .btn-warning { background: #f39c12; color: white; }
+        .btn-warning:hover { background: #d35400; transform: translateY(-2px); }
+
+        .applications-table-container {
+            background: white; border-radius: 15px; overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1); margin-bottom: 30px;
+        }
+        table { width: 100%; border-collapse: collapse; }
+        thead { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        th {
+            color: white; padding: 18px 15px; text-align: left;
+            font-weight: 600; font-size: 14px; text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        tbody tr { border-bottom: 1px solid #f1f1f1; transition: background 0.3s; }
+        tbody tr:hover { background: #f8f9fa; }
+        td { padding: 18px 15px; color: #2c3e50; }
+
+        .status-badge {
+            padding: 6px 15px; border-radius: 20px; font-size: 12px;
+            font-weight: bold; display: inline-block; text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .status-new { background: #ffeaa7; color: #d63031; }
+        .status-pending { background: #74b9ff; color: white; }
+        .status-confirmed { background: #55efc4; color: #2d3436; }
+
+        .receipt-cell { text-align: center; }
+        .receipt-btn {
+            background: #3498db; color: white; border: none;
+            width: 40px; height: 40px; border-radius: 50%;
+            cursor: pointer; display: inline-flex; align-items: center;
+            justify-content: center; font-size: 18px; transition: all 0.3s;
+        }
+        .receipt-btn:hover { background: #2980b9; transform: scale(1.1); }
+        .no-receipt { color: #95a5a6; font-style: italic; }
+
+        .action-buttons { display: flex; gap: 8px; }
+        .action-btn {
+            width: 40px; height: 40px; border: none; border-radius: 8px;
+            cursor: pointer; display: flex; align-items: center;
+            justify-content: center; font-size: 16px; transition: all 0.3s;
+        }
+        .btn-view { background: #3498db; color: white; }
+        .btn-change { background: #9b59b6; color: white; }
+        .btn-delete { background: #e74c3c; color: white; }
+        .action-btn:hover { transform: translateY(-2px); box-shadow: 0 5px 10px rgba(0,0,0,0.1); }
+
+        .loading { text-align: center; padding: 60px; color: #7f8c8d; font-size: 18px; }
+        .error-message {
+            background: #ffebee; border-left: 4px solid #ef5350;
+            padding: 20px; margin: 20px 0; border-radius: 8px; display: none;
+        }
+
+        /* Модальные окна */
+        .modal-overlay {
+            display: none; position: fixed; top: 0; left: 0;
+            width: 100%; height: 100%; background: rgba(0,0,0,0.7);
+            z-index: 1000; align-items: center; justify-content: center;
+        }
+        .modal {
+            background: white; border-radius: 15px; width: 90%;
+            max-width: 500px; padding: 30px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            animation: modalSlide 0.3s ease;
+        }
+        @keyframes modalSlide {
+            from { opacity: 0; transform: translateY(-50px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .modal-header {
+            display: flex; justify-content: space-between;
+            align-items: center; margin-bottom: 25px;
+        }
+        .modal-title { font-size: 24px; color: #2c3e50; }
+        .close-modal {
+            background: none; border: none; font-size: 28px;
+            color: #7f8c8d; cursor: pointer; padding: 0;
+            width: 30px; height: 30px; display: flex;
+            align-items: center; justify-content: center;
+        }
+        .modal-content { margin-bottom: 25px; }
+        .modal-actions { display: flex; gap: 15px; justify-content: flex-end; }
+        .modal-field { margin-bottom: 20px; }
+        .modal-field label {
+            display: block; margin-bottom: 8px; color: #2c3e50;
+            font-weight: 500;
+        }
+        .modal-field select {
+            width: 100%; padding: 12px; border: 2px solid #e0e0e0;
+            border-radius: 8px; font-size: 16px; background: white;
+        }
+        .modal-field select:focus { outline: none; border-color: #667eea; }
+        .receipt-preview {
+            max-width: 100%; max-height: 400px; border-radius: 8px;
+            margin: 15px 0; border: 2px solid #f1f1f1;
+        }
+        .app-details-grid {
+            display: grid; grid-template-columns: repeat(2, 1fr);
+            gap: 15px; margin-bottom: 20px;
+        }
+        .detail-item {
+            background: #f8f9fa; padding: 12px; border-radius: 8px;
+        }
+        .detail-label {
+            font-size: 12px; color: #7f8c8d; text-transform: uppercase;
+            letter-spacing: 0.5px; margin-bottom: 5px;
+        }
+        .detail-value { font-size: 16px; color: #2c3e50; font-weight: 500; }
+    </style>
+</head>
+<body>
+<div class="admin-container">
+    <!-- Шапка -->
+    <div class="admin-header">
+        <div class="header-left">
+            <h1>👑 Админ-панель НГТУ</h1>
+            <p>Управление заявками на спортивные секции</p>
+        </div>
+        <div class="user-info">
+            <div class="user-avatar">A</div>
+            <button class="logout-btn" onclick="logout()">🚪 Выйти</button>
+        </div>
+    </div>
+
+    <!-- Статистика -->
+    <div class="stats-grid" id="stats-container">
+        <div class="loading">Загрузка статистики...</div>
+    </div>
+
+    <!-- Панель управления -->
+    <div class="controls">
+        <button class="btn btn-primary" onclick="refreshData()">🔄 Обновить</button>
+        <button class="btn btn-success" onclick="createTestApplication()">➕ Тестовая заявка</button>
+        <button class="btn btn-warning" onclick="showAllReceipts()">📎 Все чеки</button>
+    </div>
+
+    <!-- Фильтр по секциям -->
+    <div class="controls" style="margin-top: 15px;">
+        <label style="font-weight: bold; margin-right: 10px;">📂 Секция:</label>
+        <select id="section-filter" onchange="filterBySection()" style="padding: 10px; border-radius: 8px; border: 2px solid #e0e0e0; min-width: 150px;">
+            <option value="">Все секции</option>
+            <option value="Баскетбол">🏀 Баскетбол</option>
+            <option value="Волейбол">🏐 Волейбол</option>
+            <option value="Футбол">⚽ Футбол</option>
+            <option value="Плавание">🏊 Плавание</option>
+            <option value="Теннис">🎾 Теннис</option>
+        </select>
+        <div id="section-fill" class="section-fill"></div>
+    </div>
+
+    <!-- Сообщение об ошибке -->
+    <div id="error-message" class="error-message"></div>
+
+    <!-- Таблица заявок -->
+    <div class="applications-table-container">
+        <div id="loading" class="loading">
+            <h3>⏳ Загрузка заявок...</h3>
+            <p>Пожалуйста, подождите</p>
+        </div>
+        <div id="table-container" style="display: none;">
+            <table>
+                <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Студент</th>
+                    <th>Телефон</th>
+                    <th>Секция</th>
+                    <th>Дата</th>
+                    <th>Статус</th>
+                    <th>Чек</th>
+                    <th>Действия</th>
+                </tr>
+                </thead>
+                <tbody id="applications-body"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Отладка -->
+    <div id="debug-info" style="display: none; background: white; padding: 15px; border-radius: 10px; margin-top: 20px;">
+        <h3>Отладка</h3>
+        <pre id="debug-output"></pre>
+    </div>
+</div>
+
+<!-- Модальные окна (те же, что и в оригинале) -->
+<div class="modal-overlay" id="details-modal">
+    <div class="modal">
+        <div class="modal-header">
+            <h2 class="modal-title" id="modal-title">Детали заявки</h2>
+            <button class="close-modal" onclick="closeModal()">&times;</button>
+        </div>
+        <div class="modal-content" id="modal-body">Загрузка...</div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="status-modal">
+    <div class="modal">
+        <div class="modal-header">
+            <h2 class="modal-title">Изменить статус</h2>
+            <button class="close-modal" onclick="closeStatusModal()">&times;</button>
+        </div>
+        <div class="modal-content">
+            <div class="modal-field">
+                <label>Выберите новый статус:</label>
+                <select id="status-select">
+                    <option value="Новая">Новая</option>
+                    <option value="Ожидает оплаты">Ожидает оплаты</option>
+                    <option value="Подтверждено">Подтверждено</option>
+                    <option value="Отклонено">Отклонено</option>
+                    <option value="Завершено">Завершено</option>
+                </select>
+            </div>
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-primary" onclick="saveStatus()">💾 Сохранить</button>
+            <button class="btn" onclick="closeStatusModal()" style="background: #95a5a6;">❌ Отмена</button>
+        </div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="receipt-modal">
+    <div class="modal">
+        <div class="modal-header">
+            <h2 class="modal-title" id="receipt-title">Просмотр чека</h2>
+            <button class="close-modal" onclick="closeReceiptModal()">&times;</button>
+        </div>
+        <div class="modal-content">
+            <div id="receipt-content">Загрузка...</div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let currentAppId = null;
+    let applications = [];
+    let debugMode = false;
+
+    // Проверка авторизации
+    function checkAuth() {
+    const userStr = localStorage.getItem('ngtu_user');
+    if (!userStr) {
+        window.location.href = '/';
+        return false;
+    }
+
+    const userData = JSON.parse(userStr);
+    // 🔑 ИСПРАВЛЕНИЕ: сравнение без учёта регистра
+    const userRole = (userData.role || '').toLowerCase();
+
+    if (userRole !== 'admin') {
+        console.warn('⚠️ Доступ запрещён. Роль:', userData.role);
+        window.location.href = '/'; // Редирект на главную при неверной роли
+        return false;
+    }
+    return true;
+}
+
+    function logout() {
+        localStorage.removeItem('ngtu_user');
+        window.location.href = '/';
+    }
+
+    // Безопасный fetch
+    async function safeFetch(url, options = {}) {
+        try {
+            const response = await fetch(url, {
+                ...options,
+                headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', ...options.headers }
+            });
+            const responseText = await response.text();
+            if (!response.ok) throw new Error(responseText.substring(0, 200));
+            if (!responseText.trim()) throw new Error('Пустой ответ');
+            return JSON.parse(responseText);
+        } catch (error) {
+            console.error('Fetch error:', error);
+            throw error;
+        }
+    }
+
+    function logDebug(...args) { if (debugMode) console.log(...args); }
+
+    async function loadApplications() {
+        if (!checkAuth()) return;
+        showLoading(true);
+        hideError();
+        try {
+            const data = await safeFetch('/api/applications');
+            if (data?.success) {
+                applications = data.applications || [];
+                displayApplications(applications);
+                loadStats();
+            } else {
+                showError('Ошибка: ' + (data?.error || 'Неизвестная'));
+            }
+        } catch (error) {
+            showError('Ошибка загрузки: ' + error.message);
+        } finally {
+            showLoading(false);
+        }
+    }
+
+    async function loadStats() {
+        try {
+            const data = await safeFetch('/api/stats');
+            displayStats(data?.stats || {});
+        } catch (e) {
+            displayStats({});
+        }
+    }
+
+    function displayStats(stats) {
+        const container = document.getElementById('stats-container');
+        if (!container) return;
+        container.innerHTML = `
+            <div class="stat-card"><div class="stat-icon">📊</div><div class="stat-number">${stats.total||0}</div><div class="stat-label">Всего</div></div>
+            <div class="stat-card"><div class="stat-icon">🆕</div><div class="stat-number">${stats.new_applications||0}</div><div class="stat-label">Новые</div></div>
+            <div class="stat-card"><div class="stat-icon">⏳</div><div class="stat-number">${stats.pending_payment||0}</div><div class="stat-label">Ожидают</div></div>
+            <div class="stat-card"><div class="stat-icon">✅</div><div class="stat-number">${stats.confirmed||0}</div><div class="stat-label">Подтверждено</div></div>
+            <div class="stat-card"><div class="stat-icon">💰</div><div class="stat-number">${stats.with_receipt||0}</div><div class="stat-label">С чеком</div></div>
+        `;
+    }
+
+    function displayApplications(apps) {
+        const container = document.getElementById('applications-body');
+        const tableContainer = document.getElementById('table-container');
+        if (!container || !tableContainer) return;
+
+        container.innerHTML = '';
+        if (!apps?.length) {
+            container.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:40px;color:#7f8c8d">📭 Нет заявок</td></tr>';
+            tableContainer.style.display = 'block';
+            return;
+        }
+
+        apps.forEach(app => {
+            const statusClass = getStatusClass(app.status);
+            const receiptBtn = app.has_receipt && app.receipt_url
+                ? `<button class="receipt-btn" onclick="showReceipt('${escapeStr(app.id)}', '${escapeStr(app.receipt_url)}')">📎</button>`
+                : '<span class="no-receipt">—</span>';
+
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td><strong>${escapeStr(app.id)}</strong></td>
+                <td>${escapeStr(app.student_name||'')}</td>
+                <td>${escapeStr(app.phone||'')}</td>
+                <td>${escapeStr(app.section||'')}</td>
+                <td>${escapeStr(app.date||'')}</td>
+                <td><span class="status-badge ${statusClass}">${escapeStr(app.status||'Новая')}</span></td>
+                <td class="receipt-cell">${receiptBtn}</td>
+                <td>
+                    <div class="action-buttons">
+                        <button class="action-btn btn-view" onclick="showDetails('${escapeStr(app.id)}')">👁️</button>
+                        <button class="action-btn btn-change" onclick="changeStatus('${escapeStr(app.id)}')">🔄</button>
+                        <button class="action-btn btn-delete" onclick="deleteApplication('${escapeStr(app.id)}')">🗑️</button>
+                    </div>
+                </td>
+            `;
+            container.appendChild(row);
+        });
+        tableContainer.style.display = 'block';
+        updateSectionFilterOptions(apps);
+    }
+
+    // НОВАЯ ФУНКЦИЯ: Обновление опций фильтра секций
+    function updateSectionFilterOptions(apps) {
+        const sections = [...new Set(apps.map(a => a.section).filter(Boolean))];
+        const select = document.getElementById('section-filter');
+        sections.forEach(sec => {
+            if (!select.querySelector(`option[value="${sec}"]`)) {
+                const opt = document.createElement('option');
+                opt.value = sec;
+                opt.textContent = sec;
+                select.appendChild(opt);
+            }
+        });
+    }
+
+    // НОВАЯ ФУНКЦИЯ: Фильтрация по секции
+    function filterBySection() {
+        const section = document.getElementById('section-filter').value;
+        const rows = document.querySelectorAll('#applications-body tr');
+        let visibleCount = 0, confirmedCount = 0;
+
+        rows.forEach(row => {
+            if (!row.cells[3]) return;
+            const secCell = row.cells[3].textContent.trim();
+            if (!section || secCell === section) {
+                row.style.display = '';
+                visibleCount++;
+                if (row.cells[5]?.textContent.includes('Подтверждено')) confirmedCount++;
+            } else {
+                row.style.display = 'none';
+            }
+        });
+
+        const fillEl = document.getElementById('section-fill');
+        if (section) {
+            fillEl.textContent = `✅ Подтверждено: ${confirmedCount}/25 | Показано: ${visibleCount}`;
+        } else {
+            fillEl.textContent = '';
+        }
+    }
+
+    function escapeStr(str) {
+        if (typeof str !== 'string') return str;
+        return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
+    }
+
+    async function deleteApplication(appId) {
+        if (!confirm(`Удалить заявку ${appId}?`)) return;
+        const cleanId = appId.replace('#', '');
+        try {
+            const data = await safeFetch(`/api/applications/${cleanId}`, { method: 'DELETE' });
+            if (data.success) { alert('✅ Удалено'); loadApplications(); }
+            else alert('❌ ' + (data.error || 'Ошибка'));
+        } catch (e) { alert('❌ ' + e.message); }
+    }
+
+    function changeStatus(appId) {
+        currentAppId = appId;
+        const app = applications.find(a => a.id === appId);
+        if (app) document.getElementById('status-select').value = app.status || 'Новая';
+        document.getElementById('status-modal').style.display = 'flex';
+    }
+
+    async function saveStatus() {
+        if (!currentAppId) return;
+        const newStatus = document.getElementById('status-select').value;
+        const cleanId = currentAppId.replace('#', '');
+        try {
+            const data = await safeFetch(`/api/applications/${cleanId}/status`, {
+                method: 'PUT', body: JSON.stringify({ status: newStatus })
+            });
+            if (data.success) { alert('✅ Статус обновлен'); closeStatusModal(); loadApplications(); }
+            else alert('❌ ' + (data.error || 'Ошибка'));
+        } catch (e) { alert('❌ ' + e.message); }
+    }
+
+    async function createTestApplication() {
+        const names = ['Иванов Иван', 'Петров Петр', 'Сидорова Анна'];
+        const sections = ['Баскетбол', 'Волейбол', 'Футбол', 'Плавание', 'Теннис'];
+        const name = names[Math.floor(Math.random()*names.length)];
+        const section = sections[Math.floor(Math.random()*sections.length)];
+        const phone = '79'+Math.floor(100000000+Math.random()*900000000);
+        try {
+            const data = await safeFetch('/api/applications/create', {
+                method: 'POST',
+                body: JSON.stringify({ student_name: name+' Тест', phone, section })
+            });
+            if (data.success) { alert(`✅ Создана #${data.applicationId}`); loadApplications(); }
+            else alert('❌ '+data.error);
+        } catch(e) { alert('❌ '+e.message); }
+    }
+
+    function showDetails(appId) {
+        const app = applications.find(a => a.id === appId);
+        if (!app) return alert('Не найдено');
+        document.getElementById('modal-title').textContent = `Детали ${escapeStr(appId)}`;
+        document.getElementById('modal-body').innerHTML = `
+            <div class="app-details-grid">
+                <div class="detail-item"><div class="detail-label">ID</div><div class="detail-value">${escapeStr(app.id)}</div></div>
+                <div class="detail-item"><div class="detail-label">Студент</div><div class="detail-value">${escapeStr(app.student_name)}</div></div>
+                <div class="detail-item"><div class="detail-label">Телефон</div><div class="detail-value">${escapeStr(app.phone)}</div></div>
+                <div class="detail-item"><div class="detail-label">Секция</div><div class="detail-value">${escapeStr(app.section)}</div></div>
+                <div class="detail-item"><div class="detail-label">Статус</div><div class="detail-value"><span class="status-badge ${getStatusClass(app.status)}">${escapeStr(app.status)}</span></div></div>
+                <div class="detail-item"><div class="detail-label">Дата</div><div class="detail-value">${escapeStr(app.date||'—')}</div></div>
+            </div>
+            ${app.receipt_date ? `<div class="detail-item" style="grid-column:span/2"><div class="detail-label">Чек загружен</div><div class="detail-value">${escapeStr(app.receipt_date)}</div></div>`:''}
+            <div style="text-align:center;margin-top:20px">
+                ${app.has_receipt && app.receipt_url ? `<button class="btn btn-primary" onclick="showReceipt('${escapeStr(app.id)}','${escapeStr(app.receipt_url)}')">📎 Чек</button>`:'<p style="color:#95a5a6">Чек не загружен</p>'}
+            </div>
+        `;
+        document.getElementById('details-modal').style.display = 'flex';
+    }
+
+    function showReceipt(appId, receiptUrl) {
+        if (!receiptUrl) return alert('Чек не найден');
+        document.getElementById('receipt-title').textContent = `Чек ${escapeStr(appId)}`;
+        const ext = receiptUrl.split('.').pop().toLowerCase();
+        let content = '';
+        if (['jpg','jpeg','png','gif'].includes(ext)) {
+            content = `<img src="${receiptUrl}" class="receipt-preview" onerror="this.alt='Ошибка загрузки'">`;
+        } else if (ext === 'pdf') {
+            content = `<iframe src="${receiptUrl}" width="100%" height="400px" style="border:none"></iframe>`;
+        } else {
+            content = `<p>Файл: <a href="${receiptUrl}" target="_blank">${escapeStr(receiptUrl)}</a></p>`;
+        }
+        document.getElementById('receipt-content').innerHTML = content + `<div style="text-align:center;margin-top:15px"><a href="${receiptUrl}" target="_blank" class="btn btn-primary">🔗 Открыть</a></div>`;
+        document.getElementById('receipt-modal').style.display = 'flex';
+    }
+
+    function showAllReceipts() {
+        const apps = applications.filter(a => a.has_receipt && a.receipt_url);
+        if (!apps.length) return alert('Нет чеков');
+        document.getElementById('receipt-title').textContent = 'Все чеки';
+        let html = '<div style="max-height:400px;overflow-y:auto">';
+        apps.forEach(a => {
+            html += `<div style="margin-bottom:15px;padding-bottom:15px;border-bottom:1px solid #eee">
+                <strong>${escapeStr(a.id)}</strong> — ${escapeStr(a.student_name)}<br>
+                ${escapeStr(a.section)} | ${escapeStr(a.status)}<br>
+                <a href="${a.receipt_url}" target="_blank" class="btn btn-primary" style="padding:5px 12px;margin-top:8px">📎 Открыть</a>
+            </div>`;
+        });
+        html += '</div>';
+        document.getElementById('receipt-content').innerHTML = html;
+        document.getElementById('receipt-modal').style.display = 'flex';
+    }
+
+    function refreshData() { loadApplications(); }
+    function closeModal() { document.getElementById('details-modal').style.display = 'none'; }
+    function closeStatusModal() { document.getElementById('status-modal').style.display = 'none'; currentAppId = null; }
+    function closeReceiptModal() { document.getElementById('receipt-modal').style.display = 'none'; }
+
+    function getStatusClass(status) {
+        if (!status) return 'status-new';
+        const s = status.toLowerCase();
+        if (s.includes('новая')) return 'status-new';
+        if (s.includes('ожидает')) return 'status-pending';
+        if (s.includes('подтверждено') || s.includes('завершено')) return 'status-confirmed';
+        return 'status-new';
+    }
+
+    function showLoading(show) {
+        document.getElementById('loading').style.display = show ? 'block' : 'none';
+        document.getElementById('table-container').style.display = show ? 'none' : 'block';
+    }
+
+    function showError(msg) {
+        const el = document.getElementById('error-message');
+        if (el) { el.innerHTML = `<h3>⚠️ Ошибка</h3><p>${escapeStr(msg)}</p><button class="btn btn-primary" onclick="loadApplications()" style="margin-top:10px">🔄 Повторить</button>`; el.style.display = 'block'; }
+    }
+    function hideError() { const el = document.getElementById('error-message'); if (el) el.style.display = 'none'; }
+
+    document.addEventListener('click', e => {
+        if (e.target.classList.contains('modal-overlay')) { closeModal(); closeStatusModal(); closeReceiptModal(); }
+    });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeModal(); closeStatusModal(); closeReceiptModal(); } });
+
+    document.addEventListener('DOMContentLoaded', () => {
+        if (checkAuth()) setTimeout(loadApplications, 500);
+    });
+</script>
+</body>
+</html>

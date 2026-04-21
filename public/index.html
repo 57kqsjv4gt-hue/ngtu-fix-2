@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>НГТУ - Вход в систему</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; display: flex; justify-content: center; align-items: center; padding: 20px; }
+        .card { background: white; border-radius: 20px; padding: 40px; width: 100%; max-width: 420px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); text-align: center; }
+        .logo { font-size: 48px; margin-bottom: 15px; }
+        h1 { color: #2c3e50; margin-bottom: 8px; }
+        .sub { color: #7f8c8d; margin-bottom: 25px; }
+        .input-group { margin-bottom: 18px; text-align: left; }
+        label { display: block; margin-bottom: 6px; color: #555; font-weight: 500; font-size: 14px; }
+        input { width: 100%; padding: 14px; border: 2px solid #e0e0e0; border-radius: 10px; font-size: 16px; transition: 0.3s; }
+        input:focus { outline: none; border-color: #667eea; }
+        .btn { width: 100%; padding: 14px; background: linear-gradient(135deg, #667eea, #764ba2); color: white; border: none; border-radius: 10px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 10px; transition: 0.3s; }
+        .btn:hover { transform: translateY(-2px); box-shadow: 0 8px 16px rgba(102,126,234,0.4); }
+        .btn-sec { background: #2ecc71; }
+        .link { display: block; margin-top: 15px; color: #667eea; text-decoration: none; font-weight: 500; }
+        .link:hover { text-decoration: underline; }
+        .err { background: #ffebee; color: #c62828; padding: 10px; border-radius: 8px; margin: 10px 0; display: none; font-size: 14px; }
+        .hint { background: #f0f7ff; color: #1976d2; padding: 10px; border-radius: 8px; margin-bottom: 20px; font-size: 13px; text-align: left; }
+        #reg-form { display: none; margin-top: 20px; padding-top: 20px; border-top: 1px solid #eee; text-align: left; }
+        .back-btn { background: #95a5a6; margin-top: 15px; }
+    </style>
+</head>
+<body>
+<div class="card">
+    <div class="logo">🏫</div>
+    <h1>НГТУ Спорт</h1>
+    <p class="sub">Система записи на секции</p>
+
+    <div class="hint">💡 Войдите под своей учётной записью. Система автоматически откроет нужный раздел (студент или админ).</div>
+
+    <form id="login-form">
+        <div class="input-group"><label>Логин</label><input type="text" id="user" placeholder="Введите логин" required></div>
+        <div class="input-group"><label>Пароль</label><input type="password" id="pass" placeholder="Введите пароль" required></div>
+        <div id="err" class="err"></div>
+        <button type="submit" class="btn">🔐 Войти</button>
+    </form>
+
+    <a href="#" class="link" onclick="toggleReg()">📝 Нет аккаунта? Зарегистрироваться</a>
+
+    <form id="reg-form">
+        <div class="input-group"><label>ФИО</label><input type="text" id="r-name" placeholder="Иванов И.И." required></div>
+        <div class="input-group"><label>Логин</label><input type="text" id="r-user" placeholder="Придумайте логин" required></div>
+        <div class="input-group"><label>Пароль</label><input type="password" id="r-pass" placeholder="Мин. 4 символа" required></div>
+        <div class="input-group"><label>Телефон</label><input type="tel" id="r-phone" placeholder="79123456789" required></div>
+        <button type="button" class="btn btn-sec" onclick="reg()">✅ Создать аккаунт</button>
+        <button type="button" class="btn back-btn" onclick="toggleReg()">← Назад</button>
+    </form>
+
+    <div style="margin-top: 20px; font-size: 12px; color: #95a5a6;">
+        Админ: <strong>admin</strong> / <strong>admin123</strong>
+    </div>
+</div>
+
+<script>
+    function toggleReg() {
+        const f = document.getElementById('login-form');
+        const r = document.getElementById('reg-form');
+        const l = document.querySelector('.link');
+        const isReg = r.style.display !== 'none';
+        r.style.display = isReg ? 'none' : 'block';
+        f.style.display = isReg ? 'block' : 'none';
+        l.style.display = isReg ? 'block' : 'none';
+    }
+
+    async function reg() {
+        const d = {
+            full_name: document.getElementById('r-name').value.trim(),
+            username: document.getElementById('r-user').value.trim(),
+            password: document.getElementById('r-pass').value.trim(),
+            phone: document.getElementById('r-phone').value.trim()
+        };
+        if (!d.full_name || !d.username || !d.password || !d.phone) return alert('Заполните все поля');
+        if (d.password.length < 4) return alert('Пароль слишком короткий');
+
+        try {
+            const res = await fetch('/api/student/register', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(d) });
+            const j = await res.json();
+            if (j.success) { alert('✅ Аккаунт создан! Войдите в систему.'); toggleReg(); document.getElementById('user').value = d.username; document.getElementById('pass').focus(); }
+            else alert('❌ '+j.error);
+        } catch(e) { alert('❌ Ошибка сети'); }
+    }
+
+    document.getElementById('login-form').addEventListener('submit', async e => {
+        e.preventDefault();
+        const err = document.getElementById('err');
+        err.style.display = 'none';
+        try {
+            const res = await fetch('/api/login', {
+                method: 'POST', headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({ username: document.getElementById('user').value.trim(), password: document.getElementById('pass').value.trim() })
+            });
+            const j = await res.json();
+            if (j.success) {
+                localStorage.setItem('ngtu_user', JSON.stringify(j.user));
+                // 🔑 Редирект строго по роли от сервера
+                window.location.href = j.user.role === 'admin' ? '/admin' : '/student';
+            } else {
+                err.textContent = j.error; err.style.display = 'block';
+            }
+        } catch(e) { err.textContent = 'Ошибка соединения'; err.style.display = 'block'; }
+    });
+</script>
+</body>
+</html>

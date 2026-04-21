@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Личный кабинет — НГТУ</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container { max-width: 900px; margin: 0 auto; }
+
+        .header {
+            background: white;
+            border-radius: 15px;
+            padding: 20px 30px;
+            margin-bottom: 25px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+        .header h1 { color: #2c3e50; font-size: 24px; }
+        .logout-btn {
+            background: #e74c3c;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: 0.3s;
+        }
+        .logout-btn:hover { background: #c0392b; }
+
+        .section-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+        .section-card {
+            background: white;
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+            transition: transform 0.3s;
+        }
+        .section-card:hover { transform: translateY(-3px); }
+        .section-card.full { opacity: 0.6; background: #f5f5f5; }
+        .section-name { font-weight: bold; margin-bottom: 5px; color: #2c3e50; }
+        .section-count { font-size: 24px; font-weight: bold; color: #667eea; }
+        .section-limit { font-size: 12px; color: #7f8c8d; }
+
+        .tabs { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+        .tab-btn {
+            flex: 1;
+            min-width: 150px;
+            padding: 15px;
+            background: white;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: 0.3s;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+        }
+        .tab-btn.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .tab-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        .tab-content {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            display: none;
+        }
+        .tab-content.active { display: block; }
+
+        .form-group { margin-bottom: 20px; }
+        .form-group label { display: block; margin-bottom: 8px; color: #2c3e50; font-weight: 500; }
+        .form-group input, .form-group select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
+        }
+        .form-group input:focus, .form-group select:focus { outline: none; border-color: #667eea; }
+        .form-group input:disabled { background: #f5f5f5; color: #7f8c8d; }
+
+        .btn {
+            padding: 12px 25px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: 0.3s;
+            font-size: 14px;
+        }
+        .btn-primary { background: #3498db; color: white; }
+        .btn-primary:hover { background: #2980b9; }
+        .btn-success { background: #2ecc71; color: white; }
+        .btn-success:hover { background: #27ae60; }
+        .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+        .application-card {
+            border: 1px solid #eee;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 15px;
+            background: #fafafa;
+        }
+        .status-badge {
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+            display: inline-block;
+            text-transform: uppercase;
+        }
+        .status-new { background: #ffeaa7; color: #d63031; }
+        .status-pending { background: #74b9ff; color: white; }
+        .status-confirmed { background: #55efc4; color: #2d3436; }
+        .status-rejected { background: #fab1a0; color: #d63031; }
+
+        .file-upload {
+            border: 2px dashed #ddd;
+            padding: 25px;
+            text-align: center;
+            border-radius: 10px;
+            margin: 15px 0;
+            background: #fafafa;
+        }
+        .file-upload input[type="file"] { margin-bottom: 10px; }
+
+        .error { color: #e74c3c; margin: 10px 0; font-weight: 500; }
+        .success { color: #2ecc71; margin: 10px 0; font-weight: 500; }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #7f8c8d;
+        }
+        .empty-state .icon { font-size: 48px; margin-bottom: 15px; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h1>👨‍🎓 Личный кабинет</h1>
+        <button class="logout-btn" onclick="logout()">🚪 Выйти</button>
+    </div>
+
+    <!-- Статистика секций -->
+    <div class="section-stats" id="section-stats">
+        <div class="section-card"><div class="section-name">Загрузка...</div></div>
+    </div>
+
+    <!-- Вкладки -->
+    <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab('my-apps')">📋 Мои заявки</button>
+        <button class="tab-btn" onclick="switchTab('new-app')">➕ Новая заявка</button>
+        <button class="tab-btn" id="receipt-tab" onclick="switchTab('receipt')" disabled>💰 Загрузить чек</button>
+    </div>
+
+    <!-- Мои заявки -->
+    <div id="my-apps" class="tab-content active">
+        <div id="apps-loading" class="empty-state">
+            <div class="icon">⏳</div>
+            <p>Загрузка заявок...</p>
+        </div>
+        <div id="apps-list"></div>
+    </div>
+
+    <!-- Новая заявка -->
+    <div id="new-app" class="tab-content">
+        <div class="form-group">
+            <label>ФИО</label>
+            <input type="text" id="app-name" readonly>
+        </div>
+        <div class="form-group">
+            <label>Секция</label>
+            <select id="app-section">
+                <option value="">Выберите секцию</option>
+                <option value="Баскетбол">🏀 Баскетбол</option>
+                <option value="Волейбол">🏐 Волейбол</option>
+                <option value="Футбол">⚽ Футбол</option>
+                <option value="Плавание">🏊 Плавание</option>
+                <option value="Теннис">🎾 Теннис</option>
+            </select>
+            <small id="section-availability" style="color: #7f8c8d; display: block; margin-top: 5px;"></small>
+        </div>
+        <button class="btn btn-primary" onclick="submitApplication()">📤 Подать заявку</button>
+        <div id="app-result"></div>
+    </div>
+
+    <!-- Загрузка чека -->
+    <div id="receipt" class="tab-content">
+        <div id="receipt-info">
+            <p style="color: #7f8c8d;">Выберите заявку со статусом «Ожидает оплаты», чтобы загрузить чек.</p>
+        </div>
+        <div id="receipt-form" style="display: none;">
+            <div class="form-group">
+                <label>Заявка</label>
+                <select id="receipt-app-select"></select>
+            </div>
+            <div class="file-upload">
+                <input type="file" id="receipt-file" accept=".jpg,.jpeg,.png,.pdf">
+                <p style="margin-top: 10px; color: #7f8c8d; font-size: 13px;">
+                    Допустимые форматы: JPG, PNG, PDF (макс. 10 МБ)
+                </p>
+            </div>
+            <button class="btn btn-success" onclick="uploadReceipt()">📤 Загрузить чек</button>
+            <div id="receipt-result"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // 🔑 Жёсткая проверка авторизации студента
+    const user = JSON.parse(localStorage.getItem('ngtu_user') || 'null');
+    if (!user || user.role?.toLowerCase() !== 'student') {
+        console.warn('⛔ Доступ запрещён. Роль:', user?.role);
+        window.location.href = '/';
+    }
+
+    document.getElementById('app-name').value = user.full_name || user.username;
+
+    function logout() {
+        localStorage.removeItem('ngtu_user');
+        window.location.href = '/';
+    }
+
+    function switchTab(tabId) {
+        document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+        document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+        document.getElementById(tabId).classList.add('active');
+        event.target.classList.add('active');
+
+        if (tabId === 'my-apps') loadApplications();
+        if (tabId === 'new-app') loadSectionStats();
+        if (tabId === 'receipt') prepareReceiptTab();
+    }
+
+    // Загрузка статистики секций
+    async function loadSectionStats() {
+        try {
+            const res = await fetch('/api/sections/stats');
+            const data = await res.json();
+            const container = document.getElementById('section-stats');
+            container.innerHTML = '';
+
+            if (!data.success) {
+                container.innerHTML = '<p style="color: #e74c3c;">Ошибка загрузки</p>';
+                return;
+            }
+
+            data.sections.forEach(sec => {
+                const card = document.createElement('div');
+                card.className = `section-card ${sec.isFull ? 'full' : ''}`;
+                card.innerHTML = `
+                    <div class="section-name">${sec.name}</div>
+                    <div class="section-count">${sec.enrolled}/25</div>
+                    <div class="section-limit">${sec.available} мест</div>
+                `;
+                container.appendChild(card);
+
+                const option = document.querySelector(`#app-section option[value="${sec.name}"]`);
+                if (option) {
+                    option.disabled = sec.isFull;
+                    if (sec.isFull) option.textContent = `${sec.name} (заполнена)`;
+                }
+            });
+        } catch (e) {
+            console.error('Ошибка загрузки статистики:', e);
+        }
+    }
+
+    // Загрузка заявок студента
+    async function loadApplications() {
+        const container = document.getElementById('apps-list');
+        const loading = document.getElementById('apps-loading');
+
+        if (!user.phone) {
+            loading.style.display = 'none';
+            container.innerHTML = '<p class="error">⚠️ В вашем профиле не указан телефон. Обратитесь к администратору.</p>';
+            return;
+        }
+
+        loading.style.display = 'block';
+        container.innerHTML = '';
+
+        try {
+            const res = await fetch('/api/applications/find', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ phone: user.phone })
+            });
+            const data = await res.json();
+
+            loading.style.display = 'none';
+
+            if (!data.success || !data.applications.length) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="icon">📭</div>
+                        <p>У вас пока нет заявок</p>
+                        <button class="btn btn-primary" onclick="switchTab('new-app')" style="margin-top: 15px;">
+                            ➕ Подать заявку
+                        </button>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = '';
+            let hasPending = false;
+
+            data.applications.forEach(app => {
+                if (app.status === 'Ожидает оплаты') hasPending = true;
+
+                const statusClass = app.status.toLowerCase().replace(' ', '-').replace('ё', 'е');
+
+                const card = document.createElement('div');
+                card.className = 'application-card';
+                card.innerHTML = `
+                    <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 10px;">
+                        <strong style="font-size: 18px;">${app.id}</strong>
+                        <span class="status-badge status-${statusClass}">${app.status}</span>
+                    </div>
+                    <p><strong>Секция:</strong> ${app.section}</p>
+                    <p><strong>Дата:</strong> ${app.date || '—'}</p>
+                    ${app.receipt_url ?
+                        `<p style="color: #2ecc71; font-weight: 500;">✅ Чек загружен</p>` :
+                        (app.status === 'Ожидает оплаты' ?
+                            `<p style="color: #f39c12;">⏳ Ожидается чек</p>` : '')}
+                `;
+                container.appendChild(card);
+            });
+
+            document.getElementById('receipt-tab').disabled = !hasPending;
+
+        } catch (e) {
+            loading.style.display = 'none';
+            container.innerHTML = '<p class="error">❌ Ошибка загрузки заявок</p>';
+        }
+    }
+
+    // Подача заявки
+    async function submitApplication() {
+        const section = document.getElementById('app-section').value;
+        const name = document.getElementById('app-name').value;
+        const phone = user.phone || '';
+        const result = document.getElementById('app-result');
+
+        if (!section) {
+            result.innerHTML = '<span class="error">Выберите секцию</span>';
+            return;
+        }
+
+        if (!name || !phone) {
+            result.innerHTML = '<span class="error">Ошибка: проверьте данные профиля</span>';
+            return;
+        }
+
+        result.innerHTML = '';
+
+        try {
+            const res = await fetch('/api/applications/create', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ student_name: name, phone, section })
+            });
+            const data = await res.json();
+
+            if (data.success) {
+                result.innerHTML = `<span class="success">✅ Заявка создана! ID: #${data.applicationId}</span>`;
+                setTimeout(() => {
+                    switchTab('my-apps');
+                    loadApplications();
+                }, 1500);
+            } else {
+                result.innerHTML = `<span class="error">❌ ${data.error}</span>`;
+            }
+        } catch (e) {
+            result.innerHTML = '<span class="error">❌ Ошибка сети</span>';
+        }
+    }
+
+    // Подготовка вкладки чека
+    async function prepareReceiptTab() {
+        const info = document.getElementById('receipt-info');
+        const form = document.getElementById('receipt-form');
+
+        if (!user.phone) {
+            info.innerHTML = '<p class="error">⚠️ Телефон не указан в профиле</p>';
+            info.style.display = 'block';
+            form.style.display = 'none';
+            return;
+        }
+
+        try {
+            const res = await fetch('/api/applications/find', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ phone: user.phone })
+            });
+            const data = await res.json();
+
+            const pending = data.applications?.filter(a => a.status === 'Ожидает оплаты' && !a.has_receipt) || [];
+
+            if (pending.length === 0) {
+                info.style.display = 'block';
+                form.style.display = 'none';
+                info.innerHTML = pending.length === 0 && data.applications?.length > 0
+                    ? '<p>✅ У вас нет заявок, ожидающих чек</p>'
+                    : '<p>📭 Подайте заявку, чтобы загрузить чек</p>';
+                return;
+            }
+
+            info.style.display = 'none';
+            form.style.display = 'block';
+
+            const select = document.getElementById('receipt-app-select');
+            select.innerHTML = '';
+            pending.forEach(app => {
+                const opt = document.createElement('option');
+                opt.value = app.db_id || app.id.replace('#', '');
+                opt.textContent = `${app.id} — ${app.section}`;
+                select.appendChild(opt);
+            });
+        } catch (e) {
+            console.error('Ошибка:', e);
+            info.innerHTML = '<p class="error">Ошибка загрузки</p>';
+            info.style.display = 'block';
+            form.style.display = 'none';
+        }
+    }
+
+    // Загрузка чека
+    async function uploadReceipt() {
+        const appId = document.getElementById('receipt-app-select').value;
+        const fileInput = document.getElementById('receipt-file');
+        const file = fileInput.files[0];
+        const result = document.getElementById('receipt-result');
+
+        if (!appId || !file) {
+            result.innerHTML = '<span class="error">Выберите заявку и файл</span>';
+            return;
+        }
+
+        result.innerHTML = '';
+
+        const formData = new FormData();
+        formData.append('receipt', file);
+
+        try {
+            const res = await fetch(`/api/applications/${appId}/receipt/upload`, {
+                method: 'POST',
+                body: formData
+            });
+            const data = await res.json();
+
+            if (data.success) {
+                result.innerHTML = `<span class="success">✅ Чек загружен!</span>`;
+                fileInput.value = '';
+                setTimeout(() => switchTab('my-apps'), 1500);
+            } else {
+                result.innerHTML = `<span class="error">❌ ${data.error}</span>`;
+            }
+        } catch (e) {
+            result.innerHTML = '<span class="error">❌ Ошибка сети</span>';
+        }
+    }
+
+    // Инициализация
+    document.addEventListener('DOMContentLoaded', () => {
+        loadSectionStats();
+        loadApplications();
+    });
+</script>
+</body>
+</html>
