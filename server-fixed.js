@@ -84,11 +84,8 @@ function initializeDatabase() {
         receipt_uploaded_at DATETIME,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )`, function(err) {
-        if (err) {
-            console.error('❌ Ошибка создания applications:', err.message);
-        } else {
-            console.log('✅ Таблица applications создана/проверена');
-        }
+        if (err) console.error('❌ Ошибка создания applications:', err.message);
+        else console.log('✅ Таблица applications создана/проверена');
     });
 
     // Создаём таблицу users
@@ -118,7 +115,273 @@ function initializeDatabase() {
             );
         }
     });
+
+    // Создаём таблицу schedules (расписание тренеров)
+    db.run(`CREATE TABLE IF NOT EXISTS schedules (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        section TEXT NOT NULL,
+        trainer_name TEXT NOT NULL,
+        day_of_week TEXT NOT NULL,
+        time_slot TEXT NOT NULL,
+        capacity INTEGER DEFAULT 25,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`, function(err) {
+        if (err) console.error('❌ Ошибка создания schedules:', err.message);
+        else {
+            console.log('✅ Таблица schedules создана/проверена');
+            // Заполняем тестовыми данными если пуста
+            db.get('SELECT COUNT(*) as cnt FROM schedules', (err, row) => {
+                if (row && row.cnt === 0) {
+                    const testSchedules = [
+                        ['Баскетбол', 'Иван Петров', 'Пн', '10:00', 25],
+                        ['Баскетбол', 'Иван Петров', 'Ср', '15:30', 25],
+                        ['Волейбол', 'Мария Сидорова', 'Вт', '16:00', 20],
+                        ['волейбол', 'Мария Сидорова', 'Чт', '17:00', 20],
+                        ['Футбол', 'Петр Иванов', 'Пн', '18:00', 30],
+                        ['Футбол', 'Петр Иванов', 'Пт', '19:00', 30],
+                        ['Плавание', 'Елена Краснова', 'Ср', '09:00', 15],
+                        ['Плавание', 'Елена Краснова', 'Сб', '10:00', 15],
+                        ['Теннис', 'Сергей Волков', 'Пт', '14:00', 12],
+                        ['Теннис', 'Сергей Волков', 'Вс', '15:00', 12]
+                    ];
+
+                    testSchedules.forEach(schedule => {
+                        db.run(
+                            `INSERT INTO schedules (section, trainer_name, day_of_week, time_slot, capacity)
+                             VALUES (?, ?, ?, ?, ?)`,
+                            schedule,
+                            (err) => {
+                                if (err) console.error('Ошибка добавления расписания:', err.message);
+                            }
+                        );
+                    });
+                    console.log('📅 Тестовое расписание добавлено');
+                }
+            });
+        }
+    });
+
+    // Создаём таблицу enrollments (зачисления)
+    db.run(`CREATE TABLE IF NOT EXISTS enrollments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        application_id INTEGER NOT NULL UNIQUE,
+        schedule_id INTEGER NOT NULL,
+        status TEXT DEFAULT 'active',
+        enrolled_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(application_id) REFERENCES applications(id),
+        FOREIGN KEY(schedule_id) REFERENCES schedules(id)
+    )`, function(err) {
+        if (err) console.error('❌ Ошибка создания enrollments:', err.message);
+        else console.log('✅ Таблица enrollments создана/проверена');
+    });
+
+    // Создаём таблицу waitlist (список ожидания)
+    db.run(`CREATE TABLE IF NOT EXISTS waitlist (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        application_id INTEGER NOT NULL UNIQUE,
+        schedule_id INTEGER NOT NULL,
+        position INTEGER NOT NULL,
+        added_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        status TEXT DEFAULT 'waiting',
+        FOREIGN KEY(application_id) REFERENCES applications(id),
+        FOREIGN KEY(schedule_id) REFERENCES schedules(id)
+    )`, function(err) {
+        if (err) console.error('❌ Ошибка создания waitlist:', err.message);
+        else console.log('✅ Таблица waitlist создана/проверена');
+    });
 }
+
+// ========== АЛГОРИТМ РАСПРЕДЕЛЕНИЯ ==========
+
+/**
+ * Распределяет студента на секцию с оптимизацией заполняемости
+ */
+function autoAssignStudent(applicationId, section, callback) {
+    // Проверяем что заявка существует
+    db.get('SELECT id, status FROM applications WHERE id = ?', [applicationId], (err, app) => {
+        if (err || !app) {
+            return callback({ success: false, error: 'Заявка не найдена' });
+        }
+
+        // Ищем свободное расписание
+        db.get(`SELECT s.id, s.capacity,
+                (SELECT COUNT(*) FROM enrollments e WHERE e.schedule_id = s.id AND e.status = 'active') as enrolled
+            FROM schedules s
+            WHERE LOWER(s.section) = LOWER(?)
+            ORDER BY enrolled ASC
+            LIMIT 1`, [section], (err, schedule) => {
+            
+            if (err) return callback({ success: false, error: err.message });
+            if (!schedule) return callback({ success: false, error: 'Расписание для этой секции не найдено' });
+
+            const availableSlots = schedule.capacity - (schedule.enrolled || 0);
+
+            if (availableSlots > 0) {
+                // Место есть - зачисляем напрямую
+                db.run(`INSERT INTO enrollments (application_id, schedule_id, status)
+                        VALUES (?, ?, 'active')`, [applicationId, schedule.id], function(err) {
+                    if (err) {
+                        if (err.message.includes('UNIQUE')) {
+                            return callback({ success: false, error: 'Студент уже записан' });
+                        }
+                        return callback({ success: false, error: err.message });
+                    }
+                    db.run('UPDATE applications SET status = ? WHERE id = ?', 
+                        ['Подтверждено', applicationId], () => {
+                        callback({ 
+                            success: true, 
+                            message: 'Студент зачислен',
+                            type: 'enrolled',
+                            scheduleId: schedule.id 
+                        });
+                    });
+                });
+            } else {
+                // Места нет - добавляем в очередь ожидания
+                db.get(`SELECT COUNT(*) as count FROM waitlist WHERE schedule_id = ? AND status = 'waiting'`,
+                    [schedule.id], (err, row) => {
+                    const nextPosition = (row?.count || 0) + 1;
+                    
+                    db.run(`INSERT INTO waitlist (application_id, schedule_id, position, status)
+                            VALUES (?, ?, ?, 'waiting')`, 
+                        [applicationId, schedule.id, nextPosition], function(err) {
+                        if (err) {
+                            if (err.message.includes('UNIQUE')) {
+                                return callback({ success: false, error: 'Студент уже в очереди' });
+                            }
+                            return callback({ success: false, error: err.message });
+                        }
+                        db.run('UPDATE applications SET status = ? WHERE id = ?',
+                            ['В списке ожидания', applicationId], () => {
+                            callback({
+                                success: true,
+                                message: `Добавлен в очередь ожидания (позиция ${nextPosition})`,
+                                type: 'waitlisted',
+                                position: nextPosition,
+                                scheduleId: schedule.id
+                            });
+                        });
+                    });
+                });
+            }
+        });
+    });
+}
+
+/**
+ * Обработка отчисления студента и автоматического зачисления из очереди
+ */
+function processStudentRemoval(applicationId, callback) {
+    db.get(`SELECT schedule_id FROM enrollments WHERE application_id = ? AND status = 'active'`,
+        [applicationId], (err, enrollment) => {
+        if (err || !enrollment) return callback({ success: false, error: 'Запись не найдена' });
+
+        const scheduleId = enrollment.schedule_id;
+
+        // Помечаем как неактивное
+        db.run(`UPDATE enrollments SET status = 'removed' WHERE application_id = ?`,
+            [applicationId], () => {
+            
+            // Ищем первого в очереди ожидания
+            db.get(`SELECT id, application_id FROM waitlist 
+                    WHERE schedule_id = ? AND status = 'waiting'
+                    ORDER BY position ASC LIMIT 1`, [scheduleId], (err, waitingStudent) => {
+                
+                if (!waitingStudent) return callback({ success: true, message: 'Студент удалён' });
+
+                // Переводим из очереди в зачисленные
+                db.run(`INSERT INTO enrollments (application_id, schedule_id, status)
+                        VALUES (?, ?, 'active')`, 
+                    [waitingStudent.application_id, scheduleId], function(err) {
+                    if (err) return callback({ success: false, error: err.message });
+
+                    // Обновляем позиции в очереди
+                    db.run(`UPDATE waitlist SET position = position - 1 
+                            WHERE schedule_id = ? AND status = 'waiting' AND position > 1`,
+                        [scheduleId], () => {
+                        
+                        // Удаляем перемещённого студента из очереди
+                        db.run(`DELETE FROM waitlist WHERE id = ?`, [waitingStudent.id], () => {
+                            db.run(`UPDATE applications SET status = 'Подтверждено' 
+                                    WHERE id = ?`, [waitingStudent.application_id], () => {
+                                callback({
+                                    success: true,
+                                    message: 'Студент удалён, следующий из очереди зачислен',
+                                    promotedApplicationId: waitingStudent.application_id
+                                });
+                            });
+                        });
+                    });
+                });
+            });
+        });
+    });
+}
+
+// ========== API ENDPOINTS ==========
+
+// Автоматическое распределение студента
+app.post('/api/auto-assign', (req, res) => {
+    const { applicationId, section } = req.body;
+    if (!applicationId || !section) {
+        return res.json({ success: false, error: 'Укажите applicationId и section' });
+    }
+
+    autoAssignStudent(applicationId, section, (result) => {
+        res.json(result);
+    });
+});
+
+// Получить статистику по залам
+app.get('/api/halls/distribution', (req, res) => {
+    db.all(`SELECT 
+        s.id, s.section, s.trainer_name, s.day_of_week, s.time_slot, s.capacity,
+        (SELECT COUNT(*) FROM enrollments e WHERE e.schedule_id = s.id AND e.status = 'active') as enrolled,
+        (SELECT COUNT(*) FROM waitlist w WHERE w.schedule_id = s.id AND w.status = 'waiting') as waiting
+    FROM schedules s
+    ORDER BY s.section, s.day_of_week, s.time_slot`, [], (err, rows) => {
+        if (err) return res.json({ success: false, error: err.message });
+
+        const distribution = (rows || []).map(row => ({
+            scheduleId: row.id,
+            section: row.section,
+            trainer: row.trainer_name,
+            dayTime: `${row.day_of_week} ${row.time_slot}`,
+            capacity: row.capacity,
+            enrolled: row.enrolled,
+            occupancy: Math.round((row.enrolled / row.capacity) * 100),
+            available: row.capacity - row.enrolled,
+            waitingCount: row.waiting,
+            isFull: row.enrolled >= row.capacity
+        }));
+
+        res.json({ success: true, distribution });
+    });
+});
+
+// Список ожидания для зала
+app.get('/api/waitlist/:scheduleId', (req, res) => {
+    const scheduleId = req.params.scheduleId;
+    db.all(`SELECT 
+        w.id, w.position, a.student_name, a.phone, w.added_at
+    FROM waitlist w
+    JOIN applications a ON w.application_id = a.id
+    WHERE w.schedule_id = ? AND w.status = 'waiting'
+    ORDER BY w.position ASC`, [scheduleId], (err, rows) => {
+        if (err) return res.json({ success: false, error: err.message });
+        res.json({ success: true, waitlist: rows || [] });
+    });
+});
+
+// Удалить студента с зачисления
+app.post('/api/enrollment/remove', (req, res) => {
+    const { applicationId } = req.body;
+    if (!applicationId) return res.json({ success: false, error: 'Укажите applicationId' });
+
+    processStudentRemoval(applicationId, (result) => {
+        res.json(result);
+    });
+});
 
 // ========== API ==========
 
@@ -371,6 +634,148 @@ app.get('/api/debug/tables', (req, res) => {
     db.all("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name", [], (err, tables) => {
         if (err) return res.json({ success: false, error: err.message });
         res.json({ success: true, tables: tables });
+    });
+});
+
+// ========== АНАЛИТИКА ЗАПОЛНЯЕМОСТИ ==========
+
+/**
+ * Возвращает аналитику по заполняемости секций с рекомендациями
+ */
+app.get('/api/analytics/occupancy', (req, res) => {
+    const SECTIONS = ['Баскетбол', 'Волейбол', 'Футбол', 'Плавание', 'Теннис'];
+    const TARGET_OCCUPANCY = 85;
+    const MIN_WAITLIST_FOR_EXPAND = 3;
+    
+    // Получаем расписание
+    db.all(`SELECT 
+        s.section, s.id as schedule_id, s.capacity, s.day_of_week, s.time_slot
+    FROM schedules s`, [], (err, schedules) => {
+        if (err) return res.json({ success: false, error: err.message });
+
+        const sectionsData = {};
+        SECTIONS.forEach(sec => {
+            sectionsData[sec] = {
+                name: sec, totalCapacity: 0, totalEnrolled: 0, totalWaitlist: 0,
+                slots: [], recommendation: 'maintain', reason: ''
+            };
+        });
+
+        // Для каждого слота считаем подтверждённые заявки
+        const processSlot = (slot, callback) => {
+            // Считаем подтверждённые заявки (статус "Подтверждено" или "Завершено")
+            db.get(`SELECT COUNT(*) as count FROM applications 
+                    WHERE section = ? AND status IN ('Подтверждено', 'Завершено')`, 
+                    [slot.section], (err, row) => {
+                const enrolled = row ? row.count : 0;
+                
+                // Считаем заявки в очереди (статус "В списке ожидания")
+                db.get(`SELECT COUNT(*) as count FROM applications 
+                        WHERE section = ? AND status = 'В списке ожидания'`, 
+                        [slot.section], (err, row2) => {
+                    const waitlist = row2 ? row2.count : 0;
+                    
+                    const occupancy = slot.capacity > 0 
+                        ? Math.round((enrolled / slot.capacity) * 100) 
+                        : 0;
+                    
+                    callback({
+                        id: slot.schedule_id,
+                        section: slot.section,
+                        dayTime: `${slot.day_of_week} ${slot.time_slot}`,
+                        capacity: slot.capacity,
+                        enrolled: enrolled,
+                        waitlist: waitlist,
+                        occupancy: occupancy,
+                        available: slot.capacity - enrolled
+                    });
+                });
+            });
+        };
+
+        // Обрабатываем все слоты последовательно
+        let processed = 0;
+        (schedules || []).forEach(slot => {
+            processSlot(slot, (slotData) => {
+                const sec = sectionsData[slotData.section];
+                if (sec) {
+                    sec.totalCapacity += slotData.capacity;
+                    sec.totalEnrolled += slotData.enrolled;
+                    sec.totalWaitlist += slotData.waitlist;
+                    sec.slots.push(slotData);
+                }
+                
+                processed++;
+                if (processed === (schedules || []).length) {
+                    finalizeAnalytics();
+                }
+            });
+        });
+        
+        // Если нет расписания
+        if ((schedules || []).length === 0) {
+            finalizeAnalytics();
+        }
+
+        function finalizeAnalytics() {
+            // Рассчитываем рекомендации для каждой секции
+            Object.values(sectionsData).forEach(sec => {
+                if (sec.totalCapacity === 0) {
+                    sec.recommendation = 'no_data';
+                    sec.reason = 'Нет расписания';
+                    sec.overallOccupancy = 0;
+                    return;
+                }
+                
+                sec.overallOccupancy = Math.round((sec.totalEnrolled / sec.totalCapacity) * 100);
+                
+                // Логика рекомендаций
+                if (sec.totalWaitlist >= MIN_WAITLIST_FOR_EXPAND && sec.overallOccupancy >= 90) {
+                    sec.recommendation = 'expand';
+                    sec.reason = `Высокий спрос: ${sec.totalWaitlist} в очереди, заполнено ${sec.overallOccupancy}%`;
+                } else if (sec.overallOccupancy < 50 && sec.totalWaitlist === 0) {
+                    sec.recommendation = 'reduce';
+                    sec.reason = `Низкий спрос: заполнено только ${sec.overallOccupancy}%, нет очереди`;
+                } else if (sec.overallOccupancy >= TARGET_OCCUPANCY) {
+                    sec.recommendation = 'maintain';
+                    sec.reason = `Оптимальная загрузка: ${sec.overallOccupancy}%`;
+                } else {
+                    sec.recommendation = 'monitor';
+                    sec.reason = `Заполнено ${sec.overallOccupancy}%, требуется мониторинг`;
+                }
+            });
+
+            // Сводная статистика
+            const sectionsWithCapacity = Object.values(sectionsData).filter(s => s.totalCapacity > 0);
+            const summary = {
+                totalSections: SECTIONS.length,
+                needExpansion: Object.values(sectionsData).filter(s => s.recommendation === 'expand').length,
+                canReduce: Object.values(sectionsData).filter(s => s.recommendation === 'reduce').length,
+                optimal: Object.values(sectionsData).filter(s => s.recommendation === 'maintain').length,
+                avgOccupancy: sectionsWithCapacity.length > 0
+                    ? Math.round(sectionsWithCapacity.reduce((sum, s) => sum + s.overallOccupancy, 0) / sectionsWithCapacity.length)
+                    : 0
+            };
+
+            res.json({
+                success: true,
+                summary,
+                sections: Object.values(sectionsData),
+                generatedAt: new Date().toISOString()
+            });
+        }
+    });
+});
+
+/**
+ * Экспорт аналитики в формате для отчёта
+ */
+app.get('/api/analytics/export', (req, res) => {
+    // Можно расширить для генерации CSV/Excel
+    res.json({
+        success: true,
+        message: 'Экспорт аналитики',
+        data: 'Формат: CSV/Excel - реализуется по требованию'
     });
 });
 

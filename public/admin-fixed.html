@@ -66,6 +66,7 @@
             padding: 10px 15px; border: 2px solid #e0e0e0;
             border-radius: 8px; font-size: 14px; background: white;
         }
+        
         .section-fill {
             margin-left: auto; font-weight: bold; color: #667eea;
             padding: 8px 15px; background: #f0f7ff; border-radius: 8px;
@@ -189,6 +190,188 @@
             letter-spacing: 0.5px; margin-bottom: 5px;
         }
         .detail-value { font-size: 16px; color: #2c3e50; font-weight: 500; }
+
+        /* ========== АНАЛИТИКА ЗАПОЛНЯЕМОСТИ ========== */
+.analytics-section {
+    background: white;
+    border-radius: 15px;
+    padding: 25px;
+    margin-bottom: 30px;
+    box-shadow: 0 10px 30px rgba(131, 90, 168, 0.1);
+}
+.analytics-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 25px;
+    padding-bottom: 15px;
+    border-bottom: 2px solid #f1f1f1;
+}
+.analytics-title {
+    font-size: 22px;
+    color: #2c3e50;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.analytics-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 15px;
+    margin-bottom: 25px;
+}
+.summary-card {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 20px;
+    border-radius: 12px;
+    text-align: center;
+}
+.summary-card.expand { background: linear-gradient(135deg, #e74c3c, #c0392b); }
+.summary-card.reduce { background: linear-gradient(135deg, #2ecc71, #27ae60); }
+.summary-card.optimal { background: linear-gradient(135deg, #3498db, #2980b9); }
+.summary-number { font-size: 32px; font-weight: bold; margin-bottom: 5px; }
+.summary-label { font-size: 13px; opacity: 0.9; }
+
+.sections-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 20px;
+}
+.section-card {
+    border: 2px solid #e0e0e0;
+    border-radius: 12px;
+    padding: 20px;
+    transition: all 0.3s;
+}
+.section-card.expand { border-color: #e74c3c; background: #fff5f5; }
+.section-card.reduce { border-color: #2ecc71; background: #f0fff4; }
+.section-card.maintain { border-color: #3498db; background: #f0f7ff; }
+.section-card.monitor { border-color: #f39c12; background: #fffaf0; }
+
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+}
+.section-name { font-size: 18px; font-weight: bold; color: #2c3e50; }
+.recommendation-badge {
+    padding: 5px 12px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: bold;
+    text-transform: uppercase;
+}
+.rec-expand { background: #e74c3c; color: white; }
+.rec-reduce { background: #2ecc71; color: white; }
+.rec-maintain { background: #3498db; color: white; }
+.rec-monitor { background: #f39c12; color: white; }
+.rec-no_data { background: #95a5a6; color: white; }
+
+.occupancy-bar {
+    height: 20px;
+    background: #ecf0f1;
+    border-radius: 10px;
+    overflow: hidden;
+    margin: 10px 0;
+    position: relative;
+}
+.occupancy-fill {
+    height: 100%;
+    border-radius: 10px;
+    transition: width 0.5s ease;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding-right: 8px;
+    color: white;
+    font-size: 11px;
+    font-weight: bold;
+}
+.occupancy-fill.high { background: linear-gradient(90deg, #e74c3c, #c0392b); }
+.occupancy-fill.medium { background: linear-gradient(90deg, #f39c12, #d35400); }
+.occupancy-fill.low { background: linear-gradient(90deg, #2ecc71, #27ae60); }
+
+.section-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin: 15px 0;
+    font-size: 14px;
+}
+.stat-item { text-align: center; }
+.stat-value { font-weight: bold; color: #2c3e50; }
+.stat-label { font-size: 11px; color: #7f8c8d; text-transform: uppercase; }
+
+.section-reason {
+    background: #f8f9fa;
+    padding: 10px 15px;
+    border-radius: 8px;
+    font-size: 13px;
+    color: #555;
+    margin-top: 10px;
+    border-left: 3px solid #667eea;
+}
+
+.slots-list {
+    margin-top: 15px;
+    max-height: 150px;
+    overflow-y: auto;
+}
+.slot-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 12px;
+    background: #f8f9fa;
+    border-radius: 6px;
+    margin-bottom: 8px;
+    font-size: 13px;
+}
+.slot-day { font-weight: 500; }
+.slot-waitlist { color: #e74c3c; font-weight: bold; }
+
+.refresh-analytics {
+    background: #667eea;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 8px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 500;
+    transition: all 0.3s;
+}
+.refresh-analytics:hover { background: #5568d3; transform: translateY(-2px); }
+
+.insights-panel {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    color: white;
+    border-radius: 12px;
+    padding: 20px;
+    margin-top: 20px;
+}
+.insights-title {
+    font-size: 16px;
+    font-weight: bold;
+    margin-bottom: 15px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.insight-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    font-size: 14px;
+}
+.insight-item:last-child { border-bottom: none; }
+.insight-icon { font-size: 18px; }
+.insight-text { line-height: 1.4; }
     </style>
 </head>
 <body>
@@ -230,7 +413,29 @@
         </select>
         <div id="section-fill" class="section-fill"></div>
     </div>
-
+<!-- ========== БЛОК АНАЛИТИКИ ========== -->
+<div class="analytics-section" id="analytics-section" style="display: none;">
+    <div class="analytics-header">
+        <h2 class="analytics-title">📊 Аналитика заполняемости</h2>
+        <button class="refresh-analytics" onclick="loadOccupancyAnalytics()">
+            🔄 Обновить данные
+        </button>
+    </div>
+    
+    <!-- Сводные карточки -->
+    <div class="analytics-summary" id="analytics-summary">
+        <div class="loading" style="grid-column: 1/-1;">Загрузка аналитики...</div>
+    </div>
+    
+    <!-- Карточки секций -->
+    <div class="sections-grid" id="sections-grid"></div>
+    
+    <!-- Панель инсайтов -->
+    <div class="insights-panel" id="insights-panel">
+        <div class="insights-title">💡 Рекомендации по оптимизации</div>
+        <div id="insights-list"></div>
+    </div>
+</div>
     <!-- Сообщение об ошибке -->
     <div id="error-message" class="error-message"></div>
 
@@ -623,6 +828,179 @@
     document.addEventListener('DOMContentLoaded', () => {
         if (checkAuth()) setTimeout(loadApplications, 500);
     });
+    // ========== ФУНКЦИИ АНАЛИТИКИ ==========
+
+/**
+ * Загрузка и отображение аналитики заполняемости
+ */
+async function loadOccupancyAnalytics() {
+    try {
+        const data = await safeFetch('/api/analytics/occupancy');
+        if (!data?.success) throw new Error(data?.error || 'Ошибка загрузки');
+        
+        displayAnalyticsSummary(data.summary);
+        displaySectionsAnalytics(data.sections);
+        displayInsights(data.sections);
+        
+        document.getElementById('analytics-section').style.display = 'block';
+    } catch (error) {
+        console.error('Ошибка аналитики:', error);
+        document.getElementById('analytics-summary').innerHTML = 
+            `<div class="error-message" style="display:block">⚠️ ${error.message}</div>`;
+    }
+}
+
+/**
+ * Отображение сводных карточек
+ */
+function displayAnalyticsSummary(summary) {
+    const container = document.getElementById('analytics-summary');
+    container.innerHTML = `
+        <div class="summary-card">
+            <div class="summary-number">${summary.totalSections}</div>
+            <div class="summary-label">Всего секций</div>
+        </div>
+        <div class="summary-card expand">
+            <div class="summary-number">${summary.needExpansion}</div>
+            <div class="summary-label">🔴 Нужно расширить</div>
+        </div>
+        <div class="summary-card reduce">
+            <div class="summary-number">${summary.canReduce}</div>
+            <div class="summary-label">🟢 Можно сократить</div>
+        </div>
+        <div class="summary-card optimal">
+            <div class="summary-number">${summary.avgOccupancy}%</div>
+            <div class="summary-label">Средняя заполняемость</div>
+        </div>
+    `;
+}
+
+/**
+ * Отображение карточек секций
+ */
+function displaySectionsAnalytics(sections) {
+    const container = document.getElementById('sections-grid');
+    container.innerHTML = '';
+    
+    sections.forEach(sec => {
+        const recClass = `rec-${sec.recommendation}`;
+        const recText = {
+            'expand': '🔴 Расширить',
+            'reduce': '🟢 Сократить', 
+            'maintain': '🔵 Оптимально',
+            'monitor': '🟡 Мониторить',
+            'no_data': '⚪ Нет данных'
+        }[sec.recommendation] || sec.recommendation;
+        
+        const occupancyClass = sec.overallOccupancy >= 80 ? 'high' : 
+                              sec.overallOccupancy >= 50 ? 'medium' : 'low';
+        
+        const slotsHtml = sec.slots.slice(0, 3).map(slot => `
+            <div class="slot-item">
+                <span class="slot-day">${slot.dayTime}</span>
+                <span>${slot.enrolled}/${slot.capacity}</span>
+                ${slot.waitlist > 0 ? `<span class="slot-waitlist">+${slot.waitlist} в очереди</span>` : ''}
+            </div>
+        `).join('');
+        
+        const card = document.createElement('div');
+        card.className = `section-card ${sec.recommendation}`;
+        card.innerHTML = `
+            <div class="section-header">
+                <span class="section-name">${sec.name}</span>
+                <span class="recommendation-badge ${recClass}">${recText}</span>
+            </div>
+            
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
+                <span style="font-size:13px;color:#7f8c8d">Заполняемость</span>
+                <span style="font-weight:bold">${sec.overallOccupancy}%</span>
+            </div>
+            <div class="occupancy-bar">
+                <div class="occupancy-fill ${occupancyClass}" style="width:${Math.min(sec.overallOccupancy, 100)}%">
+                    ${sec.overallOccupancy}%
+                </div>
+            </div>
+            
+            <div class="section-stats">
+                <div class="stat-item">
+                    <div class="stat-value">${sec.totalEnrolled}</div>
+                    <div class="stat-label">Зачислено</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value">${sec.totalCapacity}</div>
+                    <div class="stat-label">Мест всего</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" style="color:${sec.totalWaitlist > 0 ? '#e74c3c':'#2ecc71'}">
+                        ${sec.totalWaitlist}
+                    </div>
+                    <div class="stat-label">В очереди</div>
+                </div>
+            </div>
+            
+            <div class="section-reason">💡 ${sec.reason}</div>
+            
+            ${sec.slots.length > 0 ? `
+            <div class="slots-list">
+                <div style="font-size:12px;color:#7f8c8d;margin-bottom:8px">Расписание:</div>
+                ${slotsHtml}
+                ${sec.slots.length > 3 ? `<div style="text-align:center;font-size:12px;color:#667eea">+ ещё ${sec.slots.length - 3} слотов</div>` : ''}
+            </div>` : ''}
+        `;
+        container.appendChild(card);
+    });
+}
+
+/**
+ * Генерация текстовых инсайтов
+ */
+function displayInsights(sections) {
+    const container = document.getElementById('insights-list');
+    const insights = [];
+    
+    sections.forEach(sec => {
+        if (sec.recommendation === 'expand') {
+            insights.push({
+                icon: '🔴',
+                text: `<strong>${sec.name}:</strong> Рекомендуется добавить места. ${sec.totalWaitlist} человек в очереди, заполняемость ${sec.overallOccupancy}%.`
+            });
+        } else if (sec.recommendation === 'reduce') {
+            insights.push({
+                icon: '🟢',
+                text: `<strong>${sec.name}:</strong> Можно сократить количество мест. Заполняемость всего ${sec.overallOccupancy}%, нет спроса.`
+            });
+        } else if (sec.recommendation === 'monitor') {
+            insights.push({
+                icon: '🟡',
+                text: `<strong>${sec.name}:</strong> Требуется мониторинг. Заполняемость ${sec.overallOccupancy}% — близка к пороговым значениям.`
+            });
+        }
+    });
+    
+    if (insights.length === 0) {
+        container.innerHTML = `<div class="insight-item"><span class="insight-icon">✅</span><span class="insight-text">Все секции работают в оптимальном режиме</span></div>`;
+        return;
+    }
+    
+    container.innerHTML = insights.map(i => `
+        <div class="insight-item">
+            <span class="insight-icon">${i.icon}</span>
+            <span class="insight-text">${i.text}</span>
+        </div>
+    `).join('');
+}
+
+/**
+ * Автозагрузка аналитики при инициализации
+ */
+document.addEventListener('DOMContentLoaded', () => {
+    if (checkAuth()) {
+        setTimeout(() => {
+            loadApplications();
+            loadOccupancyAnalytics(); // 👈 Загружаем аналитику
+        }, 500);
+    }
+});
 </script>
 </body>
 </html>
