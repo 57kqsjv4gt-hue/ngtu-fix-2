@@ -136,7 +136,7 @@ function initializeDatabase() {
                         ['Баскетбол', 'Иван Петров', 'Пн', '10:00', 25],
                         ['Баскетбол', 'Иван Петров', 'Ср', '15:30', 25],
                         ['Волейбол', 'Мария Сидорова', 'Вт', '16:00', 20],
-                        ['волейбол', 'Мария Сидорова', 'Чт', '17:00', 20],
+                        ['Волейбол', 'Мария Сидорова', 'Чт', '17:00', 20],
                         ['Футбол', 'Петр Иванов', 'Пн', '18:00', 30],
                         ['Футбол', 'Петр Иванов', 'Пт', '19:00', 30],
                         ['Плавание', 'Елена Краснова', 'Ср', '09:00', 15],
@@ -332,29 +332,30 @@ app.post('/api/auto-assign', (req, res) => {
     });
 });
 
-// Получить статистику по залам
 app.get('/api/halls/distribution', (req, res) => {
     db.all(`SELECT 
-        s.id, s.section, s.trainer_name, s.day_of_week, s.time_slot, s.capacity,
-        (SELECT COUNT(*) FROM enrollments e WHERE e.schedule_id = s.id AND e.status = 'active') as enrolled,
-        (SELECT COUNT(*) FROM waitlist w WHERE w.schedule_id = s.id AND w.status = 'waiting') as waiting
+        s.id, s.section, s.trainer_name, s.day_of_week, s.time_slot, 
+        (SELECT MAX(capacity) FROM schedules s2 WHERE LOWER(s2.section)=LOWER(s.section)) as section_capacity,
+        (SELECT COUNT(DISTINCT phone) FROM applications a 
+         WHERE LOWER(a.section)=LOWER(s.section) AND a.status IN ('Подтверждено','Завершено')) as enrolled,
+        (SELECT COUNT(DISTINCT phone) FROM applications a 
+         WHERE LOWER(a.section)=LOWER(s.section) AND a.status = 'В списке ожидания') as waiting
     FROM schedules s
+    GROUP BY s.section  
     ORDER BY s.section, s.day_of_week, s.time_slot`, [], (err, rows) => {
-        if (err) return res.json({ success: false, error: err.message });
-
+        // ...
         const distribution = (rows || []).map(row => ({
             scheduleId: row.id,
             section: row.section,
             trainer: row.trainer_name,
             dayTime: `${row.day_of_week} ${row.time_slot}`,
-            capacity: row.capacity,
-            enrolled: row.enrolled,
-            occupancy: Math.round((row.enrolled / row.capacity) * 100),
-            available: row.capacity - row.enrolled,
+            capacity: row.section_capacity,  // 👈 Используем capacity секции
+            enrolled: row.enrolled,          // 👈 Уникальные студенты
+            occupancy: Math.round((row.enrolled / row.section_capacity) * 100),
+            available: row.section_capacity - row.enrolled,
             waitingCount: row.waiting,
-            isFull: row.enrolled >= row.capacity
+            isFull: row.enrolled >= row.section_capacity
         }));
-
         res.json({ success: true, distribution });
     });
 });
@@ -547,13 +548,121 @@ app.post('/api/applications/create', (req, res) => {
     if (!student_name || !phone || !section) return res.json({ success: false, error: 'Заполните все поля' });
     const cleanPhone = phone.replace(/\D/g,'');
 
-    db.get('SELECT COUNT(*) as c FROM applications WHERE section=? AND status!="Отклонено"', [section], (err, row) => {
-        if (row.c >= 25) return res.json({ success: false, error: 'Секция заполнена (макс. 25)' });
-        db.run(`INSERT INTO applications (student_name, phone, section, status) VALUES (?, ?, ?, 'Новая')`,
-            [student_name, cleanPhone, section], function(err) {
-            if (err) return res.json({ success: false, error: err.message });
-            res.json({ success: true, applicationId: this.lastID });
-        });
+    // 🔒 ПРОВЕРКА: одна заявка на студента (по телефону)
+    db.get('SELECT id, status FROM applications WHERE phone = ? AND status NOT IN ("Отклонено", "Завершено")', 
+        [cleanPhone], (err, existing) => {
+        if (existing) {
+            return res.json({ 
+                success: false, 
+                error: `У вас уже есть заявка #${existing.id} (статус: ${existing.status})` 
+            });
+        }
+// Получаем текущую заполненность секции
+ db.get(`SELECT
+    (
+        SELECT COUNT(*)
+        FROM applications
+        WHERE LOWER(section)=LOWER(?)
+        AND status IN ('Новая', 'Ожидает оплаты', 'Подтверждено', 'Завершено')
+    ) as enrolled,
+
+    (
+        SELECT SUM(capacity)
+        FROM schedules
+        WHERE LOWER(section)=LOWER(?)
+    ) as total_capacity
+`, [section, section], (err, stats) => {
+    const enrolled = stats?.enrolled || 0;
+    const capacity = stats?.total_capacity || 25;
+
+    console.log(`📊 ${section}: зачислено=${enrolled}, вместимость=${capacity}`);
+
+if (enrolled >= capacity) {
+
+    console.log(`❌ Мест нет, добавляем в очередь`);
+
+    // 1. Создаём заявку
+    db.run(
+        `INSERT INTO applications 
+        (student_name, phone, section, status) 
+        VALUES (?, ?, ?, 'В списке ожидания')`,
+        [student_name, cleanPhone, section],
+
+        function(err) {
+
+            if (err) {
+                return res.json({
+                    success: false,
+                    error: err.message
+                });
+            }
+
+            const applicationId = this.lastID;
+
+            // 2. Находим schedule_id
+            db.get(
+                `SELECT id FROM schedules
+                 WHERE LOWER(section)=LOWER(?)
+                 LIMIT 1`,
+                [section],
+
+                (err, schedule) => {
+
+                    if (err || !schedule) {
+                        return res.json({
+                            success: false,
+                            error: 'Расписание не найдено'
+                        });
+                    }
+
+                    // 3. Получаем позицию очереди
+                    db.get(
+                        `SELECT COUNT(*) as cnt
+                         FROM waitlist
+                         WHERE schedule_id=? 
+                         AND status='waiting'`,
+                        [schedule.id],
+
+                        (err, row) => {
+
+                            const position = (row?.cnt || 0) + 1;
+
+                            // 4. Добавляем в waitlist
+                            db.run(
+                                `INSERT INTO waitlist
+                                (application_id, schedule_id, position, status)
+                                VALUES (?, ?, ?, 'waiting')`,
+                                [applicationId, schedule.id, position],
+
+                                (err) => {
+
+                                    if (err) {
+                                        return res.json({
+                                            success: false,
+                                            error: err.message
+                                        });
+                                    }
+
+                                    console.log(`✅ Добавлен в очередь`);
+
+                                    res.json({
+                                        success: true,
+                                        waitlisted: true,
+                                        applicationId,
+                                        position,
+                                        message:
+                                            `Вы добавлены в очередь ожидания. Позиция: ${position}`
+                                    });
+                                }
+                            );
+                        }
+                    );
+                }
+            );
+        }
+    );
+}
+});
     });
 });
 
@@ -578,26 +687,38 @@ app.get('/api/stats', (req, res) => {
 
 app.get('/api/sections/stats', (req, res) => {
     const secs = ['Баскетбол','Волейбол','Футбол','Плавание','Теннис'];
-    db.all(`SELECT section,
-        COUNT(*) as enrolled,
-        SUM(CASE WHEN status='Подтверждено' THEN 1 ELSE 0 END) as confirmed
-    FROM applications
-    WHERE section IN (${secs.map(()=>'?').join(',')})
-    GROUP BY section`, secs, (err, rows) => {
+    
+    // Получаем статистику заявок + вместимость из schedules
+    db.all(`SELECT 
+        a.section,
+        COUNT(DISTINCT a.phone) as enrolled,
+        SUM(CASE WHEN a.status='Подтверждено' THEN 1 ELSE 0 END) as confirmed,
+        MAX(s.capacity) as capacity  -- 👈 Берём вместимость секции
+    FROM applications a
+    LEFT JOIN schedules s ON LOWER(a.section) = LOWER(s.section)
+    WHERE a.section IN (${secs.map(()=>'?').join(',')})
+    GROUP BY a.section`, secs, (err, rows) => {
         if (err) {
             console.error('❌ Ошибка статистики секций:', err.message);
             return res.json({ success: false, error: err.message });
         }
+        
+        // Формируем ответ для всех секций, даже пустых
         const stats = secs.map(s => {
-            const r = rows.find(x => x.section === s) || { enrolled:0, confirmed:0 };
+            const r = rows.find(x => x.section === s) || { enrolled:0, confirmed:0, capacity:25 };
+            const capacity = r.capacity || 25; // fallback на 25 если нет расписания
+            const enrolled = r.enrolled || 0;
+            
             return {
                 name: s,
-                enrolled: r.enrolled,
-                confirmed: r.confirmed,
-                available: Math.max(0, 25-r.enrolled),
-                isFull: r.enrolled >= 25
+                enrolled: enrolled,
+                confirmed: r.confirmed || 0,
+                capacity: capacity,           // 👈 Возвращаем реальную вместимость
+                available: Math.max(0, capacity - enrolled),
+                isFull: enrolled >= capacity
             };
         });
+        
         res.json({ success: true, sections: stats });
     });
 });
@@ -648,9 +769,15 @@ app.get('/api/analytics/occupancy', (req, res) => {
     const MIN_WAITLIST_FOR_EXPAND = 3;
     
     // Получаем расписание
-    db.all(`SELECT 
-        s.section, s.id as schedule_id, s.capacity, s.day_of_week, s.time_slot
-    FROM schedules s`, [], (err, schedules) => {
+db.all(`SELECT 
+    s.section, 
+    s.id as schedule_id, 
+    s.capacity,
+    s.day_of_week, 
+    s.time_slot,
+    (SELECT MAX(capacity) FROM schedules s2 WHERE LOWER(s2.section) = LOWER(s.section)) as section_capacity
+FROM schedules s
+ORDER BY s.section`, [], (err, schedules) => {
         if (err) return res.json({ success: false, error: err.message });
 
         const sectionsData = {};
@@ -664,16 +791,16 @@ app.get('/api/analytics/occupancy', (req, res) => {
         // Для каждого слота считаем подтверждённые заявки
         const processSlot = (slot, callback) => {
             // Считаем подтверждённые заявки (статус "Подтверждено" или "Завершено")
-            db.get(`SELECT COUNT(*) as count FROM applications 
-                    WHERE section = ? AND status IN ('Подтверждено', 'Завершено')`, 
-                    [slot.section], (err, row) => {
-                const enrolled = row ? row.count : 0;
-                
-                // Считаем заявки в очереди (статус "В списке ожидания")
-                db.get(`SELECT COUNT(*) as count FROM applications 
-                        WHERE section = ? AND status = 'В списке ожидания'`, 
-                        [slot.section], (err, row2) => {
-                    const waitlist = row2 ? row2.count : 0;
+            db.get(`SELECT COUNT(DISTINCT phone) as count FROM applications 
+        WHERE section = ? AND status IN ('Подтверждено', 'Завершено')`, 
+        [slot.section], (err, row) => {
+    const enrolled = row ? row.count : 0;
+    
+    // Считаем УНИКАЛЬНЫЕ заявки в очереди (по телефону)
+    db.get(`SELECT COUNT(DISTINCT phone) as count FROM applications 
+            WHERE section = ? AND status = 'В списке ожидания'`, 
+            [slot.section], (err, row2) => {
+        const waitlist = row2 ? row2.count : 0;
                     
                     const occupancy = slot.capacity > 0 
                         ? Math.round((enrolled / slot.capacity) * 100) 
@@ -699,7 +826,10 @@ app.get('/api/analytics/occupancy', (req, res) => {
             processSlot(slot, (slotData) => {
                 const sec = sectionsData[slotData.section];
                 if (sec) {
-                    sec.totalCapacity += slotData.capacity;
+                    if (!sec._capacityCounted) {
+                        sec.totalCapacity = slotData.section_capacity || slotData.capacity;
+                        sec._capacityCounted = true;
+                        }
                     sec.totalEnrolled += slotData.enrolled;
                     sec.totalWaitlist += slotData.waitlist;
                     sec.slots.push(slotData);
@@ -778,6 +908,310 @@ app.get('/api/analytics/export', (req, res) => {
         data: 'Формат: CSV/Excel - реализуется по требованию'
     });
 });
+// ========== УПРАВЛЕНИЕ СЕКЦИЯМИ (АДМИН) ==========
+app.get('/api/admin/sections', (req, res) => {
+    db.all(`SELECT 
+        section,
+        COUNT(DISTINCT id) as slots_count,
+        MAX(capacity) as total_capacity,
+        GROUP_CONCAT(day_of_week || ' ' || time_slot, '; ') as schedule
+    FROM schedules
+    GROUP BY section
+    ORDER BY section`, [], (err, rows) => {
+        if (err) return res.json({ success: false, error: err.message });
+        
+        const sections = (rows || []).map(row => ({
+            name: row.section,
+            slotsCount: row.slots_count,
+            totalCapacity: row.total_capacity,
+            schedule: row.schedule,
+            enrolled: 0,
+            waitlist: 0
+        }));
+
+        // ✅ ИСПРАВЛЕНО: регистронезависимая проверка статуса
+        db.all(`SELECT section,
+            COUNT(DISTINCT CASE WHEN LOWER(status) IN (
+    'подтверждено',
+    'завершено'
+) THEN phone END) as enrolled,
+            COUNT(DISTINCT CASE 
+                WHEN LOWER(status) = 'в списке ожидания' 
+                THEN LOWER(phone) 
+            END) as waitlist
+        FROM applications
+        GROUP BY section`, [], (err2, stats) => {
+            const statsMap = {};
+            (stats || []).forEach(s => { statsMap[s.section] = s; });
+            
+            sections.forEach(sec => {
+                const s = statsMap[sec.name] || { enrolled: 0, waitlist: 0 };
+                sec.enrolled = s.enrolled;
+                sec.waitlist = s.waitlist;
+                sec.occupancy = sec.totalCapacity > 0 
+                    ? Math.round((s.enrolled / sec.totalCapacity) * 100) 
+                    : 0;
+            });
+            
+            res.json({ success: true, sections });
+        });
+    });
+});
+
+/**
+ * Добавить новую секцию с расписанием
+ */
+app.post('/api/admin/sections', (req, res) => {
+    const { name, trainer, slots, capacity } = req.body;
+    if (!name || !trainer || !slots?.length) {
+        return res.json({ success: false, error: 'Укажите название, тренера и слоты расписания' });
+    }
+
+    const queries = slots.map(slot => {
+        return new Promise((resolve, reject) => {
+            db.run(`INSERT INTO schedules (section, trainer_name, day_of_week, time_slot, capacity)
+                    VALUES (?, ?, ?, ?, ?)`,
+                [name, trainer, slot.day, slot.time, capacity || 25],
+                function(err) { err ? reject(err) : resolve(this.lastID); }
+            );
+        });
+    });
+
+    Promise.all(queries)
+        .then(ids => {
+            console.log(`✅ Секция "${name}" создана: ${ids.length} слотов`);
+            res.json({ success: true, message: `Секция "${name}" добавлена`, slotsCreated: ids.length });
+        })
+        .catch(err => {
+            console.error('❌ Ошибка создания секции:', err.message);
+            res.json({ success: false, error: err.message });
+        });
+});
+
+/**
+ * Обновить вместимость секции
+ */
+app.put('/api/admin/sections/:name/capacity', (req, res) => {
+    const { name } = req.params;
+    const { capacity } = req.body;
+    
+    if (!capacity || capacity < 1 || capacity > 100) {
+        return res.json({ success: false, error: 'Вместимость должна быть от 1 до 100' });
+    }
+
+    db.run(`UPDATE schedules SET capacity = ? WHERE LOWER(section) = LOWER(?)`, 
+        [capacity, name], function(err) {
+        if (err) return res.json({ success: false, error: err.message });
+        
+        console.log(`✅ Вместимость "${name}" изменена на ${capacity}`);
+        res.json({ success: true, message: `Вместимость "${name}" обновлена: ${capacity} мест`, updated: this.changes });
+    });
+});
+
+/**
+ * Удалить секцию (мягкое удаление — только если нет зачисленных)
+ */
+app.delete('/api/admin/sections/:name', (req, res) => {
+    const { name } = req.params;
+    
+    // Проверяем, есть ли зачисленные
+    db.get(`SELECT COUNT(*) as cnt FROM applications WHERE section=? AND status IN ('Подтверждено','Завершено')`, 
+        [name], (err, row) => {
+        if (row?.cnt > 0) {
+            return res.json({ 
+                success: false, 
+                error: `Нельзя удалить: в секции ${row.cnt} зачисленных студентов` 
+            });
+        }
+        
+        db.run(`DELETE FROM schedules WHERE LOWER(section) = LOWER(?)`, [name], function(err) {
+            if (err) return res.json({ success: false, error: err.message });
+            console.log(`✅ Секция "${name}" удалена`);
+            res.json({ success: true, message: `Секция "${name}" удалена`, deleted: this.changes });
+        });
+    });
+});
+
+// ========== ПРОСМОТР ЗАЧИСЛЕННЫХ (АДМИН) ==========
+
+
+/**
+ * Получить список всех зачисленных студентов по секциям
+ */
+app.get('/api/admin/enrollments', (req, res) => {
+    const { section } = req.query; 
+    
+    let query = `SELECT 
+        a.id, a.student_name, a.phone, a.section, a.status,
+        strftime('%d.%m.%Y', a.created_at) as applied_date,
+        GROUP_CONCAT(s.day_of_week || ' ' || s.time_slot, ', ') as schedules,
+        (SELECT trainer_name FROM schedules s2 
+         WHERE LOWER(s2.section) = LOWER(a.section) LIMIT 1) as trainer
+    FROM applications a
+    LEFT JOIN schedules s ON LOWER(a.section) = LOWER(s.section)
+    WHERE a.status IN ('Подтверждено', 'Завершено')`;
+    
+    const params = [];
+    if (section) {
+        query += ` AND LOWER(a.section) = LOWER(?)`;
+        params.push(section);
+    }
+    query += ` GROUP BY a.id, a.student_name, a.phone, a.section, a.status, applied_date`;
+    query += ` ORDER BY a.section, a.created_at DESC`;
+
+    db.all(query, params, (err, rows) => {
+        if (err) return res.json({ success: false, error: err.message });
+        
+        const grouped = {};
+        (rows || []).forEach(row => {
+            if (!grouped[row.section]) {
+                grouped[row.section] = { name: row.section, students: [] };
+            }
+            grouped[row.section].students.push({
+                id: row.id,
+                name: row.student_name,
+                phone: row.phone,
+                status: row.status,
+                applied: row.applied_date,
+                schedule: row.schedules || 'Не указано',
+                trainer: row.trainer || 'Не указано'
+            });
+        });
+
+        res.json({ 
+            success: true, 
+            enrollments: Object.values(grouped),
+            total: rows?.length || 0
+        });
+    });
+});
+
+
+// ✅ ИСПРАВЛЕНО: очередь для конкретной секции (регистронезависимый)
+app.get('/api/admin/waitlist/:section', (req, res) => {
+    const section = decodeURIComponent(req.params.section);
+    console.log(`📋 Запрос очереди для секции: ${section}`);
+    
+    db.all(`SELECT 
+        a.id, a.student_name, a.phone, a.section, a.status,
+        strftime('%d.%m.%Y %H:%M', a.created_at) as added_at,
+        (SELECT COUNT(*) FROM applications a2 
+         WHERE LOWER(a2.section) = LOWER(?) 
+         AND a2.status = 'В списке ожидания' 
+         AND a2.created_at <= a.created_at) as position
+    FROM applications a
+    WHERE LOWER(a.section) = LOWER(?) AND LOWER(a.status) = LOWER('В списке ожидания')
+    ORDER BY a.created_at ASC`, [section, section], (err, rows) => {
+        if (err) {
+            console.error('❌ Ошибка:', err.message);
+            return res.json({ success: false, error: err.message });
+        }
+        
+        console.log(`✅ Найдено в очереди: ${rows.length}`);
+        res.json({ 
+            success: true, 
+            section,
+            waitlist: rows || [],
+            count: rows?.length || 0
+        });
+    });
+});
+
+app.get('/api/admin/waitlist/all', (req, res) => {
+    console.log('📋 Запрос всех очередей');
+    
+    // Получаем все секции с заявками в очереди
+    db.all(`SELECT DISTINCT section FROM applications 
+            WHERE LOWER(status) = 'в списке ожидания'
+            AND section IS NOT NULL`, [], (err, sections) => {
+        if (err) {
+            console.error('❌ Ошибка получения секций:', err.message);
+            return res.json({ success: false, error: err.message });
+        }
+        
+        const results = {};
+        let completed = 0;
+        const sectionList = sections.map(s => s.section);
+        
+        if (sectionList.length === 0) {
+            console.log('✅ Очередей нет');
+            return res.json({ success: true, waitlists: {} });
+        }
+        
+        sectionList.forEach(section => {
+            db.all(`SELECT 
+                a.id, 
+                a.student_name, 
+                a.phone, 
+                a.section, 
+                a.status,
+                strftime('%d.%m.%Y %H:%M', a.created_at) as added_at,
+                (SELECT COUNT(DISTINCT a2.id) 
+                 FROM applications a2 
+                 WHERE LOWER(a2.section) = LOWER(a.section) 
+                 AND LOWER(a2.status) = 'в списке ожидания'
+                 AND a2.created_at <= a.created_at) as position
+            FROM applications a
+            WHERE LOWER(a.section) = LOWER(?) 
+              AND LOWER(a.status) = 'в списке ожидания'
+            ORDER BY a.created_at ASC`, [section], (err, rows) => {
+                if (err) {
+                    console.error(`Ошибка для секции "${section}":`, err);
+                    rows = [];
+                }
+                results[section] = rows || [];
+                completed++;
+                
+                if (completed === sectionList.length) {
+                    console.log('✅ Отправляю waitlists:', 
+                        Object.keys(results).map(k => `${k}: ${results[k].length}`));
+                    res.json({ success: true, waitlists: results });
+                }
+            });
+        });
+    });
+});
+
+// ✅ НОВЫЙ: зачислить студента из листа ожидания
+app.post('/api/admin/waitlist/:applicationId/enroll', (req, res) => {
+    const { applicationId } = req.params;
+    
+    db.get('SELECT section, status FROM applications WHERE id = ?', [applicationId], (err, app) => {
+        if (!app) return res.json({ success: false, error: 'Заявка не найдена' });
+        if (app.status !== 'В списке ожидания') {
+            return res.json({ success: false, error: 'Заявка не в очереди ожидания' });
+        }
+
+        db.run(`UPDATE applications SET status = 'Подтверждено' WHERE id = ?`, [applicationId], function(err) {
+            if (err) return res.json({ success: false, error: err.message });
+            
+            console.log(`✅ Студент #${applicationId} зачислен из очереди`);
+            res.json({ 
+                success: true, 
+                message: `Студент зачислен в секцию "${app.section}"`,
+                applicationId
+            });
+        });
+    });
+});
+
+// ✅ НОВЫЙ: отклонить заявку из листа ожидания
+app.delete('/api/admin/waitlist/:applicationId', (req, res) => {
+    const { applicationId } = req.params;
+    
+    db.run(`UPDATE applications SET status = 'Отклонено' WHERE id = ? AND status = 'В списке ожидания'`, 
+        [applicationId], function(err) {
+        if (err) return res.json({ success: false, error: err.message });
+        
+        if (this.changes === 0) {
+            return res.json({ success: false, error: 'Заявка не найдена или уже обработана' });
+        }
+        
+        console.log(`✅ Заявка #${applicationId} отклонена`);
+        res.json({ success: true, message: 'Заявка удалена из очереди' });
+    });
+});
+
 
 // ========== РОУТЫ ==========
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
@@ -793,8 +1227,11 @@ app.use((err, req, res, next) => {
     res.status(500).json({ success: false, error: 'Внутренняя ошибка' });
 });
 
-app.listen(PORT, () => {
+const HOST = '0.0.0.0'; // или '0.0.0.0'
+
+app.listen(PORT, HOST, () => {
     console.log('\n'+'='.repeat(50)+'\n🚀 СЕРВЕР ЗАПУЩЕН\n'+'='.repeat(50));
-    console.log(`📍 http://localhost:${PORT}`);
-    console.log(`👑 Admin: http://localhost:${PORT}/admin (admin/admin123)\n`);
+    console.log(`📍 Локально: http://localhost:${PORT}`);
+    console.log(`🌐 В сети: http://<ВАШ_IP>:${PORT}`);
+    console.log(`👑 Admin: http://<ВАШ_IP>:${PORT}/admin\n`);
 });

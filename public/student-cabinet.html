@@ -151,6 +151,77 @@
             color: #7f8c8d;
         }
         .empty-state .icon { font-size: 48px; margin-bottom: 15px; }
+
+        /* Статус список ожидания */
+        .status-waiting { background: #fd79a8; color: white; }
+
+        /* Карточка позиции в очереди */
+        .waitlist-position-card {
+            background: linear-gradient(135deg, #fd79a8, #e84393);
+            color: white;
+            border-radius: 12px;
+            padding: 15px 20px;
+            margin-top: 12px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .waitlist-position-card .pos-num {
+            font-size: 36px;
+            font-weight: bold;
+            background: rgba(255,255,255,0.2);
+            width: 60px; height: 60px;
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            flex-shrink: 0;
+        }
+        .waitlist-position-card .pos-text { font-size: 14px; line-height: 1.4; }
+        .waitlist-position-card .pos-text strong { font-size: 16px; }
+
+        /* Инструкция по оплате */
+        .payment-instruction {
+            background: #fff9e6;
+            border: 2px solid #f39c12;
+            border-radius: 12px;
+            padding: 20px;
+            margin-top: 12px;
+        }
+        .payment-instruction h4 {
+            color: #d35400;
+            margin-bottom: 12px;
+            font-size: 16px;
+        }
+        .payment-amount {
+            font-size: 28px;
+            font-weight: bold;
+            color: #e74c3c;
+            margin: 10px 0;
+        }
+        .payment-steps {
+            background: white;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 12px;
+        }
+        .payment-steps p { font-weight: bold; margin-bottom: 8px; color: #2c3e50; }
+        .payment-step {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 6px 0;
+            border-bottom: 1px solid #f1f1f1;
+            font-size: 14px;
+        }
+        .payment-step:last-child { border-bottom: none; }
+        .payment-step .step-arrow { color: #667eea; font-weight: bold; }
+        .payment-note {
+            background: #ffeaa7;
+            border-radius: 6px;
+            padding: 8px 12px;
+            margin-top: 10px;
+            font-size: 13px;
+            color: #d35400;
+        }
     </style>
 </head>
 <body>
@@ -198,6 +269,15 @@
                 <option value="Теннис">🎾 Теннис</option>
             </select>
             <small id="section-availability" style="color: #7f8c8d; display: block; margin-top: 5px;"></small>
+        </div>
+        <div class="form-group">
+            <label>Курс обучения</label>
+            <select id="app-course">
+                <option value="1">1 курс</option>
+                <option value="2">2 курс</option>
+                <option value="3">3 курс (сокращённое расписание)</option>
+                            </select>
+            <small style="color: #7f8c8d; display: block; margin-top: 5px;">Влияет на сумму оплаты и количество занятий</small>
         </div>
         <button class="btn btn-primary" onclick="submitApplication()">📤 Подать заявку</button>
         <div id="app-result"></div>
@@ -307,6 +387,22 @@
             });
             const data = await res.json();
 
+            // Получаем позиции в очереди ожидания
+            let waitlistPositions = {};
+            try {
+                const wRes = await fetch('/api/waitlist/position', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ phone: user.phone })
+                });
+                const wData = await wRes.json();
+                if (wData.success) {
+                    (wData.positions || []).forEach(p => {
+                        waitlistPositions[p.app_id] = p;
+                    });
+                }
+            } catch(e) { console.warn('Не удалось загрузить позиции очереди', e); }
+
             loading.style.display = 'none';
 
             if (!data.success || !data.applications.length) {
@@ -325,27 +421,86 @@
             container.innerHTML = '';
             let hasPending = false;
 
-            data.applications.forEach(app => {
+            for (const app of data.applications) {
                 if (app.status === 'Ожидает оплаты') hasPending = true;
 
-                const statusClass = app.status.toLowerCase().replace(' ', '-').replace('ё', 'е');
+                const dbId = app.db_id || app.id.replace('#', '');
+                const waitPos = waitlistPositions[dbId];
+
+                // Определяем CSS-класс для статуса
+                let statusClass = 'status-new';
+                const st = app.status || '';
+                if (st.includes('Ожидает')) statusClass = 'status-pending';
+                else if (st.includes('Подтверждено') || st.includes('Завершено')) statusClass = 'status-confirmed';
+                else if (st.includes('Отклонено')) statusClass = 'status-rejected';
+                else if (st.includes('ожидания')) statusClass = 'status-waiting';
+
+                // Блок позиции в очереди
+                let waitlistBlock = '';
+                if (app.status === 'В списке ожидания' && waitPos) {
+                    waitlistBlock = `
+                        <div class="waitlist-position-card">
+                            <div class="pos-num">${waitPos.position}</div>
+                            <div class="pos-text">
+                                <strong>Ваше место в очереди</strong><br>
+                                ${waitPos.day_of_week} ${waitPos.time_slot} · Всего в очереди: ${waitPos.total_waiting}<br>
+                                <small>Вы будете уведомлены, когда место освободится</small>
+                            </div>
+                        </div>`;
+                } else if (app.status === 'В списке ожидания') {
+                    waitlistBlock = `<p style="color:#fd79a8; margin-top:8px;">⏳ Вы в списке ожидания</p>`;
+                }
+
+                // Блок инструкции оплаты
+                let paymentBlock = '';
+                if (app.status === 'Ожидает оплаты') {
+                    try {
+                        const pRes = await fetch(`/api/applications/${dbId}/payment-info`);
+                        const pData = await pRes.json();
+                        if (pData.success) {
+                            const pi = pData.paymentInfo;
+                            paymentBlock = `
+                                <div class="payment-instruction">
+                                    <h4>💳 Инструкция по оплате</h4>
+                                    <div class="payment-amount">${pi.amount.toLocaleString('ru')} руб.</div>
+                                    <small style="color:#7f8c8d">${pi.semester} · ${pi.courseYear >= 3 ? '3+ курс (сокращённое расписание)' : '1-2 курс'}</small>
+                                    <div class="payment-steps">
+                                        <p>🏧 Любой терминал Газпромбанка:</p>
+                                        ${pi.instructions.map((step, i) => `
+                                            <div class="payment-step">
+                                                <span class="step-arrow">${i + 1}.</span>
+                                                <span>${step}</span>
+                                            </div>`).join('')}
+                                    </div>
+                                    <div class="payment-note">
+                                        📝 <strong>ФИО</strong> студента и плательщика: ${pi.studentName}<br>
+                                        💰 <strong>Сумму вводить строго по договору:</strong> ${pi.amount.toLocaleString('ru')},00 руб.<br>
+                                        При оплате наличными: вносите с учётом комиссии<br>
+                                        (например: ${(pi.amount + Math.ceil(pi.amount * 0.017)).toLocaleString('ru')} руб.)
+                                    </div>
+                                </div>`;
+                        }
+                    } catch(e) {
+                        paymentBlock = `<p style="color:#f39c12; margin-top:8px;">⚠️ Ожидается оплата — обратитесь к администратору за суммой</p>`;
+                    }
+                }
 
                 const card = document.createElement('div');
                 card.className = 'application-card';
                 card.innerHTML = `
                     <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 10px;">
                         <strong style="font-size: 18px;">${app.id}</strong>
-                        <span class="status-badge status-${statusClass}">${app.status}</span>
+                        <span class="status-badge ${statusClass}">${app.status}</span>
                     </div>
                     <p><strong>Секция:</strong> ${app.section}</p>
                     <p><strong>Дата:</strong> ${app.date || '—'}</p>
                     ${app.receipt_url ?
-                        `<p style="color: #2ecc71; font-weight: 500;">✅ Чек загружен</p>` :
-                        (app.status === 'Ожидает оплаты' ?
-                            `<p style="color: #f39c12;">⏳ Ожидается чек</p>` : '')}
+                        `<p style="color: #2ecc71; font-weight: 500;">✅ Чек загружен</p>` : ''}
+                    ${waitlistBlock}
+                    ${paymentBlock}
                 `;
                 container.appendChild(card);
-            });
+            }
 
             document.getElementById('receipt-tab').disabled = !hasPending;
 
@@ -360,6 +515,7 @@
         const section = document.getElementById('app-section').value;
         const name = document.getElementById('app-name').value;
         const phone = user.phone || '';
+        const courseYear = document.getElementById('app-course').value;
         const result = document.getElementById('app-result');
 
         if (!section) {
@@ -378,7 +534,7 @@
             const res = await fetch('/api/applications/create', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ student_name: name, phone, section })
+                body: JSON.stringify({ student_name: name, phone, section, course_year: courseYear })
             });
             const data = await res.json();
 
